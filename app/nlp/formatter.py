@@ -27,3 +27,14 @@ def format_proxy_reply(parent_text, speaker_username, translated_text, original_
 </details>
 """
 
+def format_thread_summary(summary_text, target_lang):
+    return f"""### 🧵 Thread Summary ({target_lang})
+
+{summary_text}
+
+<details>
+<summary>Original Discussion</summary>
+Summarized by @yaplate-bot
+</details>
+"""
+

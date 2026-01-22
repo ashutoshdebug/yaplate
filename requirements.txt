@@ -4,3 +4,4 @@ python-dotenv
 requests
 pyjwt
 cryptography
+google-genai

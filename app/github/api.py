@@ -23,3 +23,17 @@ async def github_patch(endpoint: str, json: dict):
         r = await client.patch(f"{GITHUB_API}{endpoint}", headers=headers, json=json)
         r.raise_for_status()
         return r.json()
+
+async def github_get(endpoint: str):
+    headers = await _headers()
+    async with httpx.AsyncClient() as client:
+        r = await client.get(f"{GITHUB_API}{endpoint}", headers=headers)
+        r.raise_for_status()
+        return r.json()
+
+async def get_issue_comments(repo: str, issue_number: int):
+    """
+    Fetch all comments of an issue / PR (first 100 for now).
+    Later we can add pagination if needed.
+    """
+    return await github_get(f"/repos/{repo}/issues/{issue_number}/comments?per_page=100")
