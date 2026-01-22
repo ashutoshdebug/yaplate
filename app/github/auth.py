@@ -3,17 +3,15 @@ import time
 import httpx
 from app.settings import GITHUB_APP_ID, GITHUB_PRIVATE_KEY_PATH
 
-if not GITHUB_PRIVATE_KEY_PATH:
-    raise RuntimeError("GITHUB_PRIVATE_KEY_PATH not set. Check your .env file.")
-
 with open(GITHUB_PRIVATE_KEY_PATH, "r") as f:
     PRIVATE_KEY = f.read()
 
 def create_jwt():
+    now = int(time.time())
     payload = {
-        "iat": int(time.time()) - 60,
-        "exp": int(time.time()) + 600,
-        "iss": GITHUB_APP_ID
+        "iat": now - 30,
+        "exp": now + 9 * 60,
+        "iss": int(GITHUB_APP_ID)
     }
     return jwt.encode(payload, PRIVATE_KEY, algorithm="RS256")
 
@@ -30,6 +28,10 @@ async def get_installation_token():
             "https://api.github.com/app/installations",
             headers=headers
         )
+
+        print("GitHub App authenticated successfully")
+
+
         installations.raise_for_status()
 
         installation_id = installations.json()[0]["id"]
