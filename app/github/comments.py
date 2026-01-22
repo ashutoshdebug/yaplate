@@ -8,6 +8,8 @@ from app.commands.parser import (
 from app.commands.translate import translate_and_format
 from app.commands.reply import build_proxy_reply
 from app.cache.store import set_comment_mapping, get_comment_mapping
+from app.github.api import github_post, github_patch, github_delete
+from app.cache.store import set_comment_mapping, get_comment_mapping, delete_comment_mapping
 from app.nlp.context_builder import build_reply_context
 
 
@@ -20,10 +22,18 @@ async def handle_comment(payload):
 
     comment = payload["comment"]
     comment_id = comment["id"]
-    comment_body = comment["body"]
 
     repo = payload["repository"]["full_name"]
     issue_number = payload["issue"]["number"]
+
+    if action == "deleted":
+        bot_comment_id = get_comment_mapping(comment_id)
+        if bot_comment_id:
+            await github_delete(f"/repos/{repo}/issues/comments/{bot_comment_id}")
+            delete_comment_mapping(comment_id)
+        return
+    comment_body = comment["body"]
+
 
     # Parse all possible commands
     summarize_parsed = parse_summarize_command(comment_body)

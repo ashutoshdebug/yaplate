@@ -37,3 +37,12 @@ async def get_issue_comments(repo: str, issue_number: int):
     Later we can add pagination if needed.
     """
     return await github_get(f"/repos/{repo}/issues/{issue_number}/comments?per_page=100")
+
+async def github_delete(endpoint: str):
+    headers = await _headers()
+    async with httpx.AsyncClient() as client:
+        r = await client.delete(f"{GITHUB_API}{endpoint}", headers=headers)
+        # GitHub returns 204 No Content on success
+        if r.status_code not in (200, 204):
+            r.raise_for_status()
+        return True
