@@ -4,9 +4,12 @@ node_modules/
 
 # Python
 __pycache__/
+/__pycache__
+__pycache__
 *.py[cod]
 *.pyo
 *.pyd
+*.pyc
 *.so
 *.egg-info/
 .eggs/

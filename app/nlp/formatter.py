@@ -32,9 +32,5 @@ def format_thread_summary(summary_text, target_lang):
 
 {summary_text}
 
-<details>
-<summary>Original Discussion</summary>
-Summarized by @yaplate-bot
-</details>
 """
 
