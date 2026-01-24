@@ -46,3 +46,6 @@ async def github_delete(endpoint: str):
         if r.status_code not in (200, 204):
             r.raise_for_status()
         return True
+
+async def get_user_issues(repo: str, username: str):
+    return await github_get(f"/search/issues?q=repo:{repo}+type:issue+author:{username}")
