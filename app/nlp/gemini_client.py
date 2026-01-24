@@ -29,7 +29,7 @@ async def gemini_generate(prompt: str) -> str:
         if hasattr(retry, "text") and retry.text:
             return retry.text.strip()
 
-        return "⚠️ Unable to generate response (empty model output)."
+        return "Unable to generate response (empty model output)."
 
     except Exception:
         # Never let webhook crash

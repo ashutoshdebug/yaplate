@@ -16,12 +16,12 @@ async def translate_and_format(original_text, target_lang, quoted_label=None, us
     except Exception:
         translated = FALLBACK_MESSAGE
 
-    # 🔴 If LLM failed → no Translation(xx) header
+    # If LLM failed → no Translation(xx) header
     if translated.strip() == FALLBACK_MESSAGE:
         quoted = "\n".join(f"> {line}" for line in clean_text.splitlines())
         return f"""{quoted}
 
-⚠️ {FALLBACK_MESSAGE}"""
+ {FALLBACK_MESSAGE}"""
 
     # 🟢 Normal success path
     return format_quoted_translation(clean_text, target_lang, translated, quoted_label)
