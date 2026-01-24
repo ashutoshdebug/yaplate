@@ -1,17 +1,17 @@
 from app.github.api import github_post, get_user_issues
 from app.cache.store import has_been_greeted, mark_greeted
 
-WELCOME_MESSAGE = """👋 Hi @{user}, welcome to the project!
+WELCOME_MESSAGE = """Hi @{user}, welcome to the project!
 
-Thanks for opening your first issue here 🎉
+Thanks for opening your first issue here
 
 Here’s how you can contribute effectively:
-- 📖 Read the README and contribution guidelines
-- 🐛 Provide minimal reproducible examples
-- 🧪 Add logs, screenshots, or steps to reproduce
-- 💡 Feel free to ask if anything is unclear
+- Read the README and contribution guidelines
+- Provide minimal reproducible examples
+- Add logs, screenshots, or steps to reproduce
+- Feel free to ask if anything is unclear
 
-We’re happy to have you here. 🚀
+We’re happy to have you here. Happy coding! 
 """
 
 async def greet_if_first_issue(repo: str, issue_number: int, username: str):
