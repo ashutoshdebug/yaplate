@@ -9,5 +9,7 @@ async def handle_event(event_type: str, payload: dict):
         repo = payload["repository"]["full_name"]
         issue_number = payload["issue"]["number"]
         username = payload["issue"]["user"]["login"]
-
-        await greet_if_first_issue(repo, issue_number, username)
+        title = payload["issue"]["title"]
+        body = payload["issue"]["body"] or ""
+        
+        await greet_if_first_issue(repo, issue_number, username, title, body)
