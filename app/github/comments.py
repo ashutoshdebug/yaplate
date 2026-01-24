@@ -49,7 +49,9 @@ async def handle_comment(payload):
     trigger_text = comment_body
     summarize_parsed = parse_summarize_command(comment_body)
     reply_parsed = parse_reply_command(comment_body)
+    # print("RAW COMMENT BODY:\n", comment_body)
     translate_parsed = parse_translate_command(comment_body)
+    print("PARSED TRANSLATE:", translate_parsed)
 
     # If edited and command removed, do nothing (leave old bot reply)
     if action == "edited" and not (summarize_parsed or reply_parsed or translate_parsed):
