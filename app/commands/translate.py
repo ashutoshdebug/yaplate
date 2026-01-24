@@ -23,5 +23,5 @@ async def translate_and_format(original_text, target_lang, quoted_label=None, us
 
  {FALLBACK_MESSAGE}"""
 
-    # 🟢 Normal success path
+    # Normal success path
     return format_quoted_translation(clean_text, target_lang, translated, quoted_label)
