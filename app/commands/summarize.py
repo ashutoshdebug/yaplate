@@ -18,7 +18,7 @@ async def merge_summaries(summaries):
     prompt = """
 Merge the following summaries into a structured executive summary with sections:
 Context, Key Points, Decisions, Problems, Solutions, Open Questions. No emojis.
-
+(Don't add your own sections and questions.)
 Summaries:
 """
     for s in summaries:
