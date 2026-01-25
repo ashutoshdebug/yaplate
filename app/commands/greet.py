@@ -3,7 +3,7 @@ from app.nlp.lingo_client import translate
 from app.github.api import github_post, get_user_issues
 from app.cache.store import has_been_greeted, mark_greeted
 
-BASE_WELCOME = """👋 Hi @{user}, welcome to the project!
+BASE_WELCOME = """Hi @{user}, welcome to the project!
 
 Thanks for opening your first issue here! We’re excited to have you contribute.
 
