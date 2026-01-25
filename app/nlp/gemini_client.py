@@ -34,3 +34,16 @@ async def gemini_generate(prompt: str) -> str:
     except Exception:
         # Never let webhook crash
         raise
+
+
+async def detect_language_with_gemini(text: str) -> str:
+    prompt = f"""
+Detect the primary human language of the following text.
+Return ONLY the ISO 639-1 two-letter code (like en, hi, ja, zh, fr, de).
+No explanation.
+
+Text:
+{text}
+"""
+    result = await gemini_generate(prompt)  
+    return result.strip().lower()

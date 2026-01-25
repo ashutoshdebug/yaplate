@@ -1,4 +1,4 @@
-from app.nlp.language_detect import detect_dominant_language
+from app.nlp.language_detect import detect_with_fallback
 from app.nlp.lingo_client import translate
 from app.github.api import github_post, get_user_issues
 from app.cache.store import has_been_greeted, mark_greeted
@@ -22,7 +22,11 @@ async def greet_if_first_issue(repo, issue_number, username, title, body):
 
     search = await get_user_issues(repo, username)
     if search.get("total_count", 0) == 1:
-        lang = detect_dominant_language(title, body)
+        lang = await detect_with_fallback(title, body)
+
+        # Hard safety
+        if not isinstance(lang, str) or len(lang) != 2:
+            lang = "en"
 
         message = BASE_WELCOME.format(user=username)
 
