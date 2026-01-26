@@ -12,6 +12,7 @@ from app.cache.store import (
     get_comment_mapping,
     delete_comment_mapping,
 )
+import asyncio
 from app.nlp.context_builder import build_reply_context
 
 
@@ -35,6 +36,7 @@ async def handle_comment(payload):
     # === DELETE HANDLING ===
     # If user deletes their comment, delete bot's mapped reply
     if action == "deleted":
+        await asyncio.sleep(1.5)
         bot_comment_id = get_comment_mapping(comment_id)
         if bot_comment_id:
             try:
@@ -90,6 +92,7 @@ async def handle_comment(payload):
 
     # === Redis-backed edit-own-reply logic ===
     if action == "created":
+        await asyncio.sleep(1.5)
         response = await github_post(
             f"/repos/{repo}/issues/{issue_number}/comments",
             {"body": final_reply},
@@ -99,11 +102,13 @@ async def handle_comment(payload):
     elif action == "edited":
         bot_comment_id = get_comment_mapping(comment_id)
         if bot_comment_id:
+            await asyncio.sleep(1.5)
             await github_patch(
                 f"/repos/{repo}/issues/comments/{bot_comment_id}",
                 {"body": final_reply},
             )
         else:
+            await asyncio.sleep(1.5)
             response = await github_post(
                 f"/repos/{repo}/issues/{issue_number}/comments",
                 {"body": final_reply},

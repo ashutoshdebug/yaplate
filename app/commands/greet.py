@@ -7,7 +7,7 @@ from app.cache.store import (
     has_been_greeted_pr,
     mark_greeted_pr,
 )
-
+import asyncio
 ISSUE_WELCOME = """Hi @{user}, welcome to the project!
 
 Thanks for opening your first issue here. We really appreciate you taking the time to report this.
@@ -45,7 +45,23 @@ async def greet_if_first_pr(repo, pr_number, username, title, body):
     mark_greeted_pr(repo, username)
 
 async def _send_greeting(repo, number, username, title, body, template):
+    # Small delay to let GitHub + language detection stabilize
+    await asyncio.sleep(2)  # 2 seconds is perfect
+
     lang = await detect_with_fallback(title, body)
+
+    if not isinstance(lang, str) or len(lang) != 2:
+        lang = "en"
+
+    message = template.format(user=username)
+
+    if lang != "en":
+        message = await translate(message, lang)
+
+    await github_post(
+        f"/repos/{repo}/issues/{number}/comments",
+        {"body": message}
+    )
 
     if not isinstance(lang, str) or len(lang) != 2:
         lang = "en"
