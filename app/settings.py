@@ -9,3 +9,7 @@ LINGO_API_KEY = os.getenv("LINGO_API_KEY")
 # GitHub App authentication
 GITHUB_APP_ID = os.getenv("GITHUB_APP_ID")
 GITHUB_PRIVATE_KEY_PATH = os.getenv("GITHUB_PRIVATE_KEY_PATH")
+
+FOLLOWUP_ENABLED = os.getenv("FOLLOWUP_ENABLED", "true").lower() == "true"
+FOLLOWUP_DEFAULT_INTERVAL_HOURS = float(os.getenv("FOLLOWUP_DEFAULT_INTERVAL_HOURS", "48"))  # ~18 seconds
+FOLLOWUP_SCAN_INTERVAL_SECONDS = float(os.getenv("FOLLOWUP_SCAN_INTERVAL_SECONDS", "600"))  # for fast testing

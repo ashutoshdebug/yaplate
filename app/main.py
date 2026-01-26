@@ -3,9 +3,21 @@ from fastapi import FastAPI, Request, Header, HTTPException
 from app.security.webhook_verify import verify_signature
 from app.github.events import handle_event
 from app.logger import get_logger
+from contextlib import asynccontextmanager
+import asyncio
+from app.workers.followup_scheduler import followup_loop
 
-app = FastAPI()
 logger = get_logger()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: start background follow-up scheduler
+    asyncio.create_task(followup_loop())
+    logger.info("Follow-up scheduler started")
+    yield
+    # Shutdown: nothing to clean yet
+
+app = FastAPI(lifespan=lifespan)
 
 @app.post("/webhook")
 async def github_webhook(

@@ -1,41 +1,61 @@
 from app.nlp.language_detect import detect_with_fallback
 from app.nlp.lingo_client import translate
-from app.github.api import github_post, get_user_issues
-from app.cache.store import has_been_greeted, mark_greeted
+from app.github.api import github_post
+from app.cache.store import (
+    has_been_greeted,
+    mark_greeted,
+    has_been_greeted_pr,
+    mark_greeted_pr,
+)
 
-BASE_WELCOME = """Hi @{user}, welcome to the project!
+ISSUE_WELCOME = """Hi @{user}, welcome to the project!
 
-Thanks for opening your first issue here! We’re excited to have you contribute.
+Thanks for opening your first issue here. We really appreciate you taking the time to report this.
 
-Here’s how you can contribute effectively:
-- Read the README and contribution guidelines
-- Provide minimal reproducible examples
-- Add logs, screenshots, or steps to reproduce
-- Feel free to ask if anything is unclear
+To help us resolve it faster:
+- Add clear reproduction steps
+- Share logs, screenshots, or error messages
+- Mention expected vs actual behavior
 
-We’re happy to have you here. Happy coding!
+Feel free to ask if anything is unclear. Happy collaborating!
+"""
+
+PR_WELCOME = """Hi @{user}, welcome to the project!
+
+Thanks for opening your first pull request — great to see your contribution!
+
+A few tips for a smooth review:
+- Make sure tests pass
+- Keep commits focused and well-described
+- Add context if the change is large
+
+Looking forward to reviewing your work. Happy coding!
 """
 
 async def greet_if_first_issue(repo, issue_number, username, title, body):
     if has_been_greeted(repo, username):
         return
+    await _send_greeting(repo, issue_number, username, title, body, ISSUE_WELCOME)
+    mark_greeted(repo, username)
 
-    search = await get_user_issues(repo, username)
-    if search.get("total_count", 0) == 1:
-        lang = await detect_with_fallback(title, body)
+async def greet_if_first_pr(repo, pr_number, username, title, body):
+    if has_been_greeted_pr(repo, username):
+        return
+    await _send_greeting(repo, pr_number, username, title, body, PR_WELCOME)
+    mark_greeted_pr(repo, username)
 
-        # Hard safety
-        if not isinstance(lang, str) or len(lang) != 2:
-            lang = "en"
+async def _send_greeting(repo, number, username, title, body, template):
+    lang = await detect_with_fallback(title, body)
 
-        message = BASE_WELCOME.format(user=username)
+    if not isinstance(lang, str) or len(lang) != 2:
+        lang = "en"
 
-        if lang != "en":
-            message = await translate(message, lang)
+    message = template.format(user=username)
 
-        await github_post(
-            f"/repos/{repo}/issues/{issue_number}/comments",
-            {"body": message}
-        )
+    if lang != "en":
+        message = await translate(message, lang)
 
-        mark_greeted(repo, username)
+    await github_post(
+        f"/repos/{repo}/issues/{number}/comments",
+        {"body": message}
+    )

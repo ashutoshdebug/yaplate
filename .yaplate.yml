@@ -1,0 +1,9 @@
+followup:
+  enabled: true
+  default_interval_hours: 48
+
+  # Optional per-repo override
+  repos:
+    # owner/repo: hours
+    # example:
+    # ashutoshdebug/yaplate: 24
