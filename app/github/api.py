@@ -56,3 +56,16 @@ async def get_user_prs(repo: str, username: str):
     Search pull requests created by user in this repo.
     """
     return await github_get(f"/search/issues?q=repo:{repo}+type:pr+author:{username}")
+
+async def get_repo_maintainers(repo: str):
+    """
+    Returns GitHub users with maintain/admin permission.
+    """
+    owners = await github_get(f"/repos/{repo}/collaborators?permission=maintain")
+    admins = await github_get(f"/repos/{repo}/collaborators?permission=admin")
+
+    users = set()
+    for u in owners + admins:
+        users.add(u["login"])
+
+    return list(users)

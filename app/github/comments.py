@@ -1,4 +1,4 @@
-from app.github.api import github_post, github_patch, github_delete
+from app.github.api import github_post, github_patch, github_delete, get_repo_maintainers
 from app.commands.summarize import summarize_thread
 from app.commands.parser import (
     parse_summarize_command,
@@ -18,13 +18,20 @@ from app.cache.store import (
 )
 from app.settings import FOLLOWUP_DEFAULT_INTERVAL_HOURS, MAX_FOLLOWUP_ATTEMPTS
 from app.nlp.context_builder import build_reply_context
+from app.nlp.semantic_check import wants_maintainer_attention
 import asyncio
 import time
 
 
 def is_pure_quote(comment_body: str) -> bool:
     lines = [l.strip() for l in comment_body.strip().splitlines()]
-    return all(line.startswith(">") for line in lines)
+    return lines and all(line.startswith(">") for line in lines)
+
+def extract_user_text(comment_body: str) -> str:
+    return "\n".join(
+        line for line in comment_body.splitlines()
+        if not line.strip().startswith(">")
+    ).strip()
 
 
 async def handle_comment(payload):
@@ -35,25 +42,39 @@ async def handle_comment(payload):
     comment_body = comment.get("body", "")
     comment_user = comment["user"]["login"]
 
-    # Ignore bot's own comments
     if comment_user.lower().endswith("[bot]") or comment_user.lower() == "yaplate-bot":
         return
 
     repo = payload["repository"]["full_name"]
     issue_number = payload["issue"]["number"]
 
-    # --------------------------------------------------
-    # 1. Hard stop only if PURE quote (no user message)
-    # --------------------------------------------------
+    # 1. Hard stop: pure quote
     if action == "created" and is_pure_quote(comment_body):
         cancel_followup(repo, issue_number)
         cancel_stale(repo, issue_number)
         return
 
-    # --------------------------------------------------
-    # 2. Normal reply (including quote + text)
-    #    Reset stale & schedule next follow-up
-    # --------------------------------------------------
+    # 2. Quote + text → check for maintainer intent
+    if action == "created" and comment_body.lstrip().startswith(">"):
+        user_text = extract_user_text(comment_body)
+
+        if user_text and await wants_maintainer_attention(user_text):
+            maintainers = await get_repo_maintainers(repo)
+            if maintainers:
+                mentions = " ".join(f"@{m}" for m in maintainers)
+                await github_post(
+                    f"/repos/{repo}/issues/{issue_number}/comments",
+                    {
+                        "body": f"{mentions}\n\nThe author is waiting for maintainer / reviewer approval. Escalating and stopping automation."
+                    }
+                )
+
+            # HARD STOP: no more followups or stale
+            cancel_followup(repo, issue_number)
+            cancel_stale(repo, issue_number)
+            return
+
+    # 3. Normal reply → reset follow-up cycle
     if action == "created":
         cancel_stale(repo, issue_number)
 
@@ -66,12 +87,9 @@ async def handle_comment(payload):
                 next_due = time.time() + FOLLOWUP_DEFAULT_INTERVAL_HOURS * 3600
                 reschedule_followup(repo, issue_number, next_due)
             else:
-                # Max attempts reached → silent stop
                 cancel_followup(repo, issue_number)
 
-    # -----------------------------
-    # 3. Handle user comment delete
-    # -----------------------------
+    # 4. Handle user comment deletion
     if action == "deleted":
         await asyncio.sleep(1.5)
         bot_comment_id = get_comment_mapping(comment_id)
@@ -83,20 +101,14 @@ async def handle_comment(payload):
             delete_comment_mapping(comment_id)
         return
 
-    # -----------------------------
-    # 4. Parse supported commands
-    # -----------------------------
+    # 5. Parse commands
     summarize_parsed = parse_summarize_command(comment_body)
     reply_parsed = parse_reply_command(comment_body)
     translate_parsed = parse_translate_command(comment_body)
 
-    # If edited but no command anymore → do nothing
     if action == "edited" and not (summarize_parsed or reply_parsed or translate_parsed):
         return
 
-    # -----------------------------
-    # 5. Execute commands
-    # -----------------------------
     if summarize_parsed:
         final_reply = await summarize_thread(
             repo=repo,
@@ -121,13 +133,10 @@ async def handle_comment(payload):
             quoted_label=translate_parsed.get("quoted_label"),
             user_message=comment_body,
         )
-
     else:
         return
 
-    # -----------------------------------
-    # 6. Redis-backed reply update system
-    # -----------------------------------
+    # 6. Redis-backed reply mapping
     if action == "created":
         await asyncio.sleep(1.5)
         response = await github_post(

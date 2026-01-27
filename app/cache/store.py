@@ -67,8 +67,17 @@ def reschedule_followup(repo: str, issue_number: int, next_due_at: float):
 def cancel_followup(repo: str, issue_number: int):
     r = get_redis()
     key = f"{FOLLOWUP_PREFIX}{repo}:{issue_number}"
+
+    # Remove followup state
     r.delete(key)
+
+    # Remove from scheduler queue
     r.zrem(FOLLOWUP_INDEX, key)
+
+    # Safety: remove any stale job too
+    stale_key = f"{STALE_PREFIX}{repo}:{issue_number}"
+    r.delete(stale_key)
+    r.zrem(STALE_INDEX, stale_key)
 
 def get_due_followups(now: float):
     r = get_redis()
