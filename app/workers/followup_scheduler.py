@@ -12,7 +12,11 @@ from app.cache.store import (
 )
 from app.github.api import github_post, github_get
 from app.nlp.lingo_client import translate
-from app.settings import FOLLOWUP_SCAN_INTERVAL_SECONDS, STALE_INTERVAL_HOURS
+from app.settings import (
+    FOLLOWUP_SCAN_INTERVAL_SECONDS,
+    STALE_INTERVAL_HOURS,
+    MAX_FOLLOWUP_ATTEMPTS,
+)
 from app.nlp.language_detect import detect_with_fallback
 
 FOLLOWUP_TEMPLATE = (
@@ -28,10 +32,13 @@ async def process_followup(key: str):
     if not data or str(data.get("sent")) == "1" or "issue_number" not in data:
         return
 
+    attempt = int(data.get("attempt", 1))
+    if attempt > MAX_FOLLOWUP_ATTEMPTS:
+        return  # silent stop
+
     repo = data["repo"]
     issue_number = int(data["issue_number"])
     assignee = data["assignee"]
-    issue_lang = data["lang"]
 
     issue = await github_get(f"/repos/{repo}/issues/{issue_number}")
 
@@ -40,22 +47,16 @@ async def process_followup(key: str):
         if issue["user"]["login"] != assignee:
             return
     else:
-        # Issue: ensure still assigned
         assignees = [u["login"] for u in issue.get("assignees", [])]
         if assignee not in assignees:
             return
 
-    followup_lang = issue_lang
-
-    # Try detecting from latest assignee comment
-    try:
-        comments = await github_get(f"/repos/{repo}/issues/{issue_number}/comments")
-        for c in comments:
-            if c["user"]["login"] == assignee and c.get("body", "").strip():
-                followup_lang = await detect_with_fallback("Assignee comment", c["body"])
-                break
-    except Exception:
-        pass
+    # 🔒 Lock language from Redis, never re-detect from replies
+    followup_lang = data.get("lang")
+    if not followup_lang:
+        title = issue.get("title", "")
+        body = issue.get("body", "") or ""
+        followup_lang = await detect_with_fallback(title, body)
 
     translated = await translate(FOLLOWUP_TEMPLATE, followup_lang)
     body = f"@{assignee}\n\n{translated}"
@@ -67,9 +68,10 @@ async def process_followup(key: str):
 
     mark_followup_sent(key)
 
-    # Schedule stale
-    stale_at = time.time() + STALE_INTERVAL_HOURS * 3600
-    schedule_stale(repo, issue_number, followup_lang, stale_at)
+    # Schedule stale for this attempt
+    if attempt <= MAX_FOLLOWUP_ATTEMPTS:
+        stale_at = time.time() + STALE_INTERVAL_HOURS * 3600
+        schedule_stale(repo, issue_number, followup_lang, stale_at)
 
 
 async def process_stale(key: str):
@@ -101,11 +103,9 @@ async def followup_loop():
         try:
             now = time.time()
 
-            # Follow-ups
             for key in get_due_followups(now):
                 await process_followup(key)
 
-            # Stales
             for key in get_due_stales(now):
                 await process_stale(key)
 

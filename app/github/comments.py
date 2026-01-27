@@ -13,9 +13,18 @@ from app.cache.store import (
     delete_comment_mapping,
     cancel_followup,
     cancel_stale,
+    reschedule_followup,
+    get_followup_data,
 )
+from app.settings import FOLLOWUP_DEFAULT_INTERVAL_HOURS, MAX_FOLLOWUP_ATTEMPTS
 from app.nlp.context_builder import build_reply_context
 import asyncio
+import time
+
+
+def is_pure_quote(comment_body: str) -> bool:
+    lines = [l.strip() for l in comment_body.strip().splitlines()]
+    return all(line.startswith(">") for line in lines)
 
 
 async def handle_comment(payload):
@@ -34,15 +43,34 @@ async def handle_comment(payload):
     issue_number = payload["issue"]["number"]
 
     # --------------------------------------------------
-    # 1. Cancel follow-up & stale if user replies quoting
+    # 1. Hard stop only if PURE quote (no user message)
     # --------------------------------------------------
-    if action == "created" and comment_body.lstrip().startswith(">"):
+    if action == "created" and is_pure_quote(comment_body):
         cancel_followup(repo, issue_number)
         cancel_stale(repo, issue_number)
         return
 
+    # --------------------------------------------------
+    # 2. Normal reply (including quote + text)
+    #    Reset stale & schedule next follow-up
+    # --------------------------------------------------
+    if action == "created":
+        cancel_stale(repo, issue_number)
+
+        key = f"yaplate:followup:{repo}:{issue_number}"
+        data = get_followup_data(key)
+
+        if data:
+            attempt = int(data.get("attempt", 1))
+            if attempt < MAX_FOLLOWUP_ATTEMPTS:
+                next_due = time.time() + FOLLOWUP_DEFAULT_INTERVAL_HOURS * 3600
+                reschedule_followup(repo, issue_number, next_due)
+            else:
+                # Max attempts reached → silent stop
+                cancel_followup(repo, issue_number)
+
     # -----------------------------
-    # 2. Handle user comment delete
+    # 3. Handle user comment delete
     # -----------------------------
     if action == "deleted":
         await asyncio.sleep(1.5)
@@ -56,7 +84,7 @@ async def handle_comment(payload):
         return
 
     # -----------------------------
-    # 3. Parse supported commands
+    # 4. Parse supported commands
     # -----------------------------
     summarize_parsed = parse_summarize_command(comment_body)
     reply_parsed = parse_reply_command(comment_body)
@@ -67,7 +95,7 @@ async def handle_comment(payload):
         return
 
     # -----------------------------
-    # 4. Execute commands
+    # 5. Execute commands
     # -----------------------------
     if summarize_parsed:
         final_reply = await summarize_thread(
@@ -98,7 +126,7 @@ async def handle_comment(payload):
         return
 
     # -----------------------------------
-    # 5. Redis-backed reply update system
+    # 6. Redis-backed reply update system
     # -----------------------------------
     if action == "created":
         await asyncio.sleep(1.5)

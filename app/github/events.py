@@ -1,6 +1,6 @@
 from app.github.comments import handle_comment
 from app.commands.greet import greet_if_first_issue, greet_if_first_pr
-from app.cache.store import schedule_followup, cancel_followup
+from app.cache.store import schedule_followup, cancel_followup, cancel_stale
 from app.nlp.language_detect import detect_with_fallback
 from app.settings import FOLLOWUP_DEFAULT_INTERVAL_HOURS
 import time
@@ -34,6 +34,7 @@ async def handle_event(event_type: str, payload: dict):
             lang = await detect_with_fallback(title, body)
             due_at = time.time() + FOLLOWUP_DEFAULT_INTERVAL_HOURS * 3600
 
+            # fresh follow-up cycle (attempt = 1 inside store)
             schedule_followup(
                 repo=repo,
                 issue_number=issue_number,
@@ -44,6 +45,7 @@ async def handle_event(event_type: str, payload: dict):
 
         elif action in ("unassigned", "closed"):
             cancel_followup(repo, issue_number)
+            cancel_stale(repo, issue_number)
 
     # ---------------- PULL REQUESTS ----------------
     elif event_type == "pull_request":
@@ -60,6 +62,7 @@ async def handle_event(event_type: str, payload: dict):
             lang = await detect_with_fallback(title, body)
             due_at = time.time() + FOLLOWUP_DEFAULT_INTERVAL_HOURS * 3600
 
+            # fresh follow-up cycle (attempt = 1 inside store)
             schedule_followup(
                 repo=repo,
                 issue_number=pr_number,
@@ -70,3 +73,4 @@ async def handle_event(event_type: str, payload: dict):
 
         elif action == "closed":
             cancel_followup(repo, pr_number)
+            cancel_stale(repo, pr_number)
