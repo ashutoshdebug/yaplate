@@ -1,7 +1,8 @@
+from app.settings import GEMINI_API_KEY
 from google import genai
-import os
+# import os
 
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+client = genai.Client(api_key=GEMINI_API_KEY)
 
 async def gemini_generate(prompt: str) -> str:
     try:

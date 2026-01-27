@@ -5,6 +5,13 @@ load_dotenv()
 
 GITHUB_WEBHOOK_SECRET = os.getenv("GITHUB_WEBHOOK_SECRET")
 LINGO_API_KEY = os.getenv("LINGO_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+if not LINGO_API_KEY:
+    raise RuntimeError("LINGO_API_KEY is not set")
+
+if not GEMINI_API_KEY:
+    raise RuntimeError("GEMINI_API_KEY is not set")
 
 # GitHub App authentication
 GITHUB_APP_ID = os.getenv("GITHUB_APP_ID")
