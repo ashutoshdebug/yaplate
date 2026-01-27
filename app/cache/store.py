@@ -1,12 +1,6 @@
 import time
-from app.cache.keys import FOLLOWUP_PREFIX, FOLLOWUP_INDEX
+from app.cache.keys import FOLLOWUP_PREFIX, FOLLOWUP_INDEX, KEY_PREFIX, FIRST_ISSUE_PREFIX, FIRST_PR_PREFIX
 from app.cache.redis_client import get_redis
-
-KEY_PREFIX = "yaplate:comment_map:"
-
-FIRST_ISSUE_PREFIX = "yaplate:first_issue_greeted:"
-
-FIRST_PR_PREFIX = "yaplate:first_pr_greeted:"
 
 def set_comment_mapping(user_comment_id: int, bot_comment_id: int):
     r = get_redis()
