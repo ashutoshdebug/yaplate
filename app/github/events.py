@@ -5,14 +5,21 @@ from app.nlp.language_detect import detect_with_fallback
 from app.settings import FOLLOWUP_DEFAULT_INTERVAL_HOURS
 import time
 
+
 async def handle_event(event_type: str, payload: dict):
+    # ---------------- COMMENTS ----------------
+    if "repository" not in payload:
+        return
+    
     if event_type in ("issue_comment", "pull_request_review_comment"):
         await handle_comment(payload)
+        return
+
+    repo = payload["repository"]["full_name"]
 
     # ---------------- ISSUES ----------------
-    elif event_type == "issues":
+    if event_type == "issues":
         action = payload.get("action")
-        repo = payload["repository"]["full_name"]
         issue = payload["issue"]
         issue_number = issue["number"]
         title = issue["title"]
@@ -23,16 +30,16 @@ async def handle_event(event_type: str, payload: dict):
             await greet_if_first_issue(repo, issue_number, username, title, body)
 
         elif action == "assigned":
-            target_user = payload["assignee"]["login"]
+            assignee = payload["assignee"]["login"]
             lang = await detect_with_fallback(title, body)
             due_at = time.time() + FOLLOWUP_DEFAULT_INTERVAL_HOURS * 3600
 
             schedule_followup(
                 repo=repo,
                 issue_number=issue_number,
-                assignee=target_user,
+                assignee=assignee,
                 lang=lang,
-                due_at=due_at
+                due_at=due_at,
             )
 
         elif action in ("unassigned", "closed"):
@@ -41,30 +48,25 @@ async def handle_event(event_type: str, payload: dict):
     # ---------------- PULL REQUESTS ----------------
     elif event_type == "pull_request":
         action = payload.get("action")
-        repo = payload["repository"]["full_name"]
         pr = payload["pull_request"]
         pr_number = pr["number"]
         title = pr["title"]
         body = pr["body"] or ""
-
-        # Target is PR author
-        target_user = pr["user"]["login"]
+        author = pr["user"]["login"]
 
         if action == "opened":
-            # Greet first-time PR author
-            await greet_if_first_pr(repo, pr_number, target_user, title, body)
+            await greet_if_first_pr(repo, pr_number, author, title, body)
 
-            # Schedule follow-up for PR author
             lang = await detect_with_fallback(title, body)
             due_at = time.time() + FOLLOWUP_DEFAULT_INTERVAL_HOURS * 3600
 
             schedule_followup(
                 repo=repo,
                 issue_number=pr_number,
-                assignee=target_user,  # reused field for worker
+                assignee=author,  # reused field for worker
                 lang=lang,
-                due_at=due_at
+                due_at=due_at,
             )
 
-        elif action in ("closed",):
+        elif action == "closed":
             cancel_followup(repo, pr_number)

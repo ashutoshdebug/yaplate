@@ -1,5 +1,5 @@
 import time
-from app.cache.keys import FOLLOWUP_PREFIX, FOLLOWUP_INDEX, KEY_PREFIX, FIRST_ISSUE_PREFIX, FIRST_PR_PREFIX
+from app.cache.keys import FOLLOWUP_PREFIX, FOLLOWUP_INDEX, KEY_PREFIX, FIRST_ISSUE_PREFIX, FIRST_PR_PREFIX, STALE_PREFIX, STALE_INDEX
 from app.cache.redis_client import get_redis
 
 def set_comment_mapping(user_comment_id: int, bot_comment_id: int):
@@ -62,3 +62,31 @@ def has_been_greeted_pr(repo: str, username: str) -> bool:
 def mark_greeted_pr(repo: str, username: str):
     r = get_redis()
     r.set(f"{FIRST_PR_PREFIX}{repo}:{username}", 1)
+
+from app.cache.keys import STALE_PREFIX, STALE_INDEX
+
+def schedule_stale(repo: str, issue_number: int, lang: str, due_at: float):
+    r = get_redis()
+    key = f"{STALE_PREFIX}{repo}:{issue_number}"
+    r.hset(key, mapping={
+        "repo": repo,
+        "issue_number": issue_number,
+        "lang": lang,
+        "due_at": due_at,
+    })
+    r.zadd(STALE_INDEX, {key: due_at})
+
+def cancel_stale(repo: str, issue_number: int):
+    r = get_redis()
+    key = f"{STALE_PREFIX}{repo}:{issue_number}"
+    r.delete(key)
+    r.zrem(STALE_INDEX, key)
+
+def get_due_stales(now: float):
+    r = get_redis()
+    return r.zrangebyscore(STALE_INDEX, 0, now)
+
+def get_stale_data(key: str):
+    r = get_redis()
+    return r.hgetall(key)
+

@@ -11,9 +11,11 @@ from app.cache.store import (
     set_comment_mapping,
     get_comment_mapping,
     delete_comment_mapping,
+    cancel_followup,
+    cancel_stale,
 )
-import asyncio
 from app.nlp.context_builder import build_reply_context
+import asyncio
 
 
 async def handle_comment(payload):
@@ -24,17 +26,24 @@ async def handle_comment(payload):
     comment_body = comment.get("body", "")
     comment_user = comment["user"]["login"]
 
-    sender = payload["sender"]["login"]
-
-    # Ignore all bot authored events completely (prevents self-delete loops)
+    # Ignore bot's own comments
     if comment_user.lower().endswith("[bot]") or comment_user.lower() == "yaplate-bot":
         return
 
     repo = payload["repository"]["full_name"]
     issue_number = payload["issue"]["number"]
 
-    # === DELETE HANDLING ===
-    # If user deletes their comment, delete bot's mapped reply
+    # --------------------------------------------------
+    # 1. Cancel follow-up & stale if user replies quoting
+    # --------------------------------------------------
+    if action == "created" and comment_body.lstrip().startswith(">"):
+        cancel_followup(repo, issue_number)
+        cancel_stale(repo, issue_number)
+        return
+
+    # -----------------------------
+    # 2. Handle user comment delete
+    # -----------------------------
     if action == "deleted":
         await asyncio.sleep(1.5)
         bot_comment_id = get_comment_mapping(comment_id)
@@ -42,33 +51,32 @@ async def handle_comment(payload):
             try:
                 await github_delete(f"/repos/{repo}/issues/comments/{bot_comment_id}")
             except Exception:
-                # Bot comment may already be gone; never crash webhook
                 pass
             delete_comment_mapping(comment_id)
         return
 
-    # Parse all possible commands
-    trigger_text = comment_body
+    # -----------------------------
+    # 3. Parse supported commands
+    # -----------------------------
     summarize_parsed = parse_summarize_command(comment_body)
     reply_parsed = parse_reply_command(comment_body)
-    # print("RAW COMMENT BODY:\n", comment_body)
     translate_parsed = parse_translate_command(comment_body)
-    # print("PARSED TRANSLATE:", translate_parsed)
 
-    # If edited and command removed, do nothing (leave old bot reply)
+    # If edited but no command anymore → do nothing
     if action == "edited" and not (summarize_parsed or reply_parsed or translate_parsed):
         return
 
-    # 0) Summarize
+    # -----------------------------
+    # 4. Execute commands
+    # -----------------------------
     if summarize_parsed:
         final_reply = await summarize_thread(
             repo=repo,
             issue_number=issue_number,
             target_lang=summarize_parsed["target_lang"],
-            trigger_text=trigger_text,
+            trigger_text=comment_body,
         )
 
-    # 1) Proxy reply
     elif reply_parsed:
         ctx = build_reply_context(payload)
         final_reply = await build_proxy_reply(
@@ -78,7 +86,6 @@ async def handle_comment(payload):
             target_lang=reply_parsed["target_lang"],
         )
 
-    # 2) Translate
     elif translate_parsed:
         final_reply = await translate_and_format(
             translate_parsed["quoted_text"],
@@ -90,7 +97,9 @@ async def handle_comment(payload):
     else:
         return
 
-    # === Redis-backed edit-own-reply logic ===
+    # -----------------------------------
+    # 5. Redis-backed reply update system
+    # -----------------------------------
     if action == "created":
         await asyncio.sleep(1.5)
         response = await github_post(
@@ -101,14 +110,14 @@ async def handle_comment(payload):
 
     elif action == "edited":
         bot_comment_id = get_comment_mapping(comment_id)
+        await asyncio.sleep(1.5)
+
         if bot_comment_id:
-            await asyncio.sleep(1.5)
             await github_patch(
                 f"/repos/{repo}/issues/comments/{bot_comment_id}",
                 {"body": final_reply},
             )
         else:
-            await asyncio.sleep(1.5)
             response = await github_post(
                 f"/repos/{repo}/issues/{issue_number}/comments",
                 {"body": final_reply},
