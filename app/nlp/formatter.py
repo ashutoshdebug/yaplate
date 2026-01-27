@@ -18,7 +18,9 @@ def format_quoted_translation(original_text, target_lang, translated_text, quote
 
     
 def format_proxy_reply(parent_text, speaker_username, translated_text, original_text, target_lang):
-    return f"""> {parent_text}
+    quoted_parent = "\n".join(f"> {line}" for line in parent_text.splitlines())
+
+    return f"""{quoted_parent}
 
 @{speaker_username} says:
 {translated_text}
@@ -30,6 +32,7 @@ def format_proxy_reply(parent_text, speaker_username, translated_text, original_
 — @{speaker_username}
 </details>
 """
+
 
 def format_thread_summary(summary_text, target_lang):
     return f"""### Thread Summary ({target_lang})
