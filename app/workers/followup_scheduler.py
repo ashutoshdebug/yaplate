@@ -1,5 +1,6 @@
 import asyncio
 import time
+from httpx import HTTPStatusError
 
 from app.cache.store import (
     get_due_followups,
@@ -9,6 +10,7 @@ from app.cache.store import (
     get_due_stales,
     get_stale_data,
     cancel_stale,
+    cancel_followup,
 )
 from app.github.api import github_post, github_get
 from app.nlp.lingo_client import translate
@@ -17,7 +19,6 @@ from app.settings import (
     STALE_INTERVAL_HOURS,
     MAX_FOLLOWUP_ATTEMPTS,
 )
-from app.nlp.language_detect import detect_with_fallback
 
 FOLLOWUP_TEMPLATE = (
     "Just a gentle follow-up on this issue.\n"
@@ -39,10 +40,25 @@ async def process_followup(key: str):
     repo = data["repo"]
     issue_number = int(data["issue_number"])
     assignee = data["assignee"]
+    lang = data["lang"]
 
-    issue = await github_get(f"/repos/{repo}/issues/{issue_number}")
+    # Safe fetch
+    try:
+        issue = await github_get(f"/repos/{repo}/issues/{issue_number}")
+    except HTTPStatusError as e:
+        if e.response.status_code == 404:
+            cancel_followup(repo, issue_number)
+            return
+        raise
 
-    # PR: ensure author is same
+    # Hard stop if already stale
+    labels = [l["name"].lower() for l in issue.get("labels", [])]
+    if "stale" in labels:
+        cancel_followup(repo, issue_number)
+        cancel_stale(repo, issue_number)
+        return
+
+    # Validate target
     if "pull_request" in issue:
         if issue["user"]["login"] != assignee:
             return
@@ -51,14 +67,7 @@ async def process_followup(key: str):
         if assignee not in assignees:
             return
 
-    # 🔒 Lock language from Redis, never re-detect from replies
-    followup_lang = data.get("lang")
-    if not followup_lang:
-        title = issue.get("title", "")
-        body = issue.get("body", "") or ""
-        followup_lang = await detect_with_fallback(title, body)
-
-    translated = await translate(FOLLOWUP_TEMPLATE, followup_lang)
+    translated = await translate(FOLLOWUP_TEMPLATE, lang)
     body = f"@{assignee}\n\n{translated}"
 
     await github_post(
@@ -68,10 +77,9 @@ async def process_followup(key: str):
 
     mark_followup_sent(key)
 
-    # Schedule stale for this attempt
     if attempt <= MAX_FOLLOWUP_ATTEMPTS:
         stale_at = time.time() + STALE_INTERVAL_HOURS * 3600
-        schedule_stale(repo, issue_number, followup_lang, stale_at)
+        schedule_stale(repo, issue_number, lang, stale_at)
 
 
 async def process_stale(key: str):
@@ -82,6 +90,20 @@ async def process_stale(key: str):
     repo = data["repo"]
     issue_number = int(data["issue_number"])
     lang = data.get("lang", "en")
+
+    try:
+        issue = await github_get(f"/repos/{repo}/issues/{issue_number}")
+    except HTTPStatusError as e:
+        if e.response.status_code == 404:
+            cancel_stale(repo, issue_number)
+            return
+        raise
+
+    # Do nothing if already stale
+    labels = [l["name"].lower() for l in issue.get("labels", [])]
+    if "stale" in labels:
+        cancel_stale(repo, issue_number)
+        return
 
     translated = await translate(STALE_TEMPLATE, lang)
 

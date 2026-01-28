@@ -1,4 +1,4 @@
-from app.github.api import github_post, github_patch, github_delete, get_repo_maintainers
+from app.github.api import github_post, github_patch, github_delete, get_repo_maintainers, github_get
 from app.commands.summarize import summarize_thread
 from app.commands.parser import (
     parse_summarize_command,
@@ -48,13 +48,25 @@ async def handle_comment(payload):
     repo = payload["repository"]["full_name"]
     issue_number = payload["issue"]["number"]
 
+    # -------------------------------------------------
+    # 0. Hard silence if already marked as stale
+    # -------------------------------------------------
+    issue = await github_get(f"/repos/{repo}/issues/{issue_number}")
+    labels = [l["name"].lower() for l in issue.get("labels", [])]
+    if "stale" in labels:
+        return
+
+    # -------------------------------------------------
     # 1. Hard stop: pure quote
+    # -------------------------------------------------
     if action == "created" and is_pure_quote(comment_body):
         cancel_followup(repo, issue_number)
         cancel_stale(repo, issue_number)
         return
 
-    # 2. Quote + text → check for maintainer intent
+    # -------------------------------------------------
+    # 2. Quote + text → maintainer escalation
+    # -------------------------------------------------
     if action == "created" and comment_body.lstrip().startswith(">"):
         user_text = extract_user_text(comment_body)
 
@@ -69,12 +81,13 @@ async def handle_comment(payload):
                     }
                 )
 
-            # HARD STOP: no more followups or stale
             cancel_followup(repo, issue_number)
             cancel_stale(repo, issue_number)
             return
 
+    # -------------------------------------------------
     # 3. Normal reply → reset follow-up cycle
+    # -------------------------------------------------
     if action == "created":
         cancel_stale(repo, issue_number)
 
@@ -89,7 +102,9 @@ async def handle_comment(payload):
             else:
                 cancel_followup(repo, issue_number)
 
+    # -------------------------------------------------
     # 4. Handle user comment deletion
+    # -------------------------------------------------
     if action == "deleted":
         await asyncio.sleep(1.5)
         bot_comment_id = get_comment_mapping(comment_id)
@@ -101,7 +116,9 @@ async def handle_comment(payload):
             delete_comment_mapping(comment_id)
         return
 
+    # -------------------------------------------------
     # 5. Parse commands
+    # -------------------------------------------------
     summarize_parsed = parse_summarize_command(comment_body)
     reply_parsed = parse_reply_command(comment_body)
     translate_parsed = parse_translate_command(comment_body)
@@ -136,7 +153,9 @@ async def handle_comment(payload):
     else:
         return
 
+    # -------------------------------------------------
     # 6. Redis-backed reply mapping
+    # -------------------------------------------------
     if action == "created":
         await asyncio.sleep(1.5)
         response = await github_post(
