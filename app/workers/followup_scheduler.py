@@ -109,7 +109,7 @@ async def process_stale(key: str):
 
     await github_post(
         f"/repos/{repo}/issues/{issue_number}/comments",
-        {"body": translated + " 💤"}
+        {"body": translated}
     )
 
     await github_post(
