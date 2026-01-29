@@ -28,6 +28,62 @@ FOLLOWUP_TEMPLATE = (
 STALE_TEMPLATE = "No response received. Marking this as stale."
 
 
+# --------------------------------------------------
+# Startup reconciliation (missed webhooks recovery)
+# --------------------------------------------------
+
+async def reconcile_on_startup():
+    try:
+        result = await list_installed_repos()
+        repos = result.get("repositories", [])
+        now = time.time()
+
+        for repo_obj in repos:
+            full = repo_obj["full_name"]
+
+            try:
+                issues = await list_open_assigned_issues(full)
+            except Exception:
+                continue
+
+            for issue in issues:
+                number = issue["number"]
+                assignees = issue.get("assignees", [])
+                labels = [l["name"].lower() for l in issue.get("labels", [])]
+
+                if not assignees:
+                    continue
+                if "stale" in labels:
+                    continue
+                if has_followup(full, number):
+                    continue
+
+                assignee = assignees[0]["login"]
+                title = issue["title"]
+                body = issue.get("body") or ""
+
+                if not body.strip():
+                    lang = "en"
+                else:
+                    lang = await detect_with_fallback(title, body)
+                due_at = now + FOLLOWUP_DEFAULT_INTERVAL_HOURS * 3600
+
+                schedule_followup(
+                    repo=full,
+                    issue_number=number,
+                    assignee=assignee,
+                    lang=lang,
+                    due_at=due_at,
+                )
+
+    except Exception as e:
+        print("Startup reconciliation error:", e)
+
+
+# --------------------------------------------------
+# Follow-up processing
+# --------------------------------------------------
+
 async def process_followup(key: str):
     data = get_followup_data(key)
     if not data or str(data.get("sent")) == "1" or "issue_number" not in data:

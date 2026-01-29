@@ -1,7 +1,7 @@
 from langdetect import detect, DetectorFactory
 from collections import Counter
 import re
-from app.nlp.gemini_client import detect_language_with_gemini  # you'll add this
+from app.nlp.gemini_client import detect_language_with_gemini
 
 DetectorFactory.seed = 0  # deterministic results
 
@@ -14,13 +14,22 @@ def safe_detect(text: str) -> str:
 
 
 async def detect_with_fallback(title: str, body: str) -> str:
+    title = (title or "").strip()
+    body = (body or "").strip()
+
+    # 🔒 HARD RULE: If body is empty, force English
+    if not body:
+        return "en"
+
     texts = []
 
-    if body and body.strip():
-        parts = re.split(r"[。\n.!?]", body)
-        texts.extend([p.strip() for p in parts if len(p.strip()) > 10])
-    else:
-        texts.append(title)
+    # Split body into meaningful chunks
+    parts = re.split(r"[。\n.!?]", body)
+    texts.extend([p.strip() for p in parts if len(p.strip()) > 10])
+
+    # Fallback: if body chunks are too small, still force English
+    if not texts:
+        return "en"
 
     langs = [safe_detect(t) for t in texts if t.strip()]
 
