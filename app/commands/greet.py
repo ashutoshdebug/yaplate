@@ -8,6 +8,8 @@ from app.cache.store import (
     mark_greeted_pr,
 )
 import asyncio
+
+
 ISSUE_WELCOME = """Hi @{user}, welcome to the project!
 
 Thanks for opening your first issue here. We really appreciate you taking the time to report this.
@@ -32,19 +34,24 @@ A few tips for a smooth review:
 Looking forward to reviewing your work. Happy coding!
 """
 
-async def greet_if_first_issue(repo, issue_number, username, title, body):
-    if has_been_greeted(repo, username):
-        return
-    await _send_greeting(repo, issue_number, username, title, body, ISSUE_WELCOME)
-    mark_greeted(repo, username)
 
-async def greet_if_first_pr(repo, pr_number, username, title, body):
-    if has_been_greeted_pr(repo, username):
+async def greet_if_first_issue(repo_id, repo_full_name, issue_number, username, title, body):
+    if has_been_greeted(repo_id, username):
         return
-    await _send_greeting(repo, pr_number, username, title, body, PR_WELCOME)
-    mark_greeted_pr(repo, username)
 
-async def _send_greeting(repo, number, username, title, body, template):
+    await _send_greeting(repo_full_name, issue_number, username, title, body, ISSUE_WELCOME)
+    mark_greeted(repo_id, username)
+
+
+async def greet_if_first_pr(repo_id, repo_full_name, pr_number, username, title, body):
+    if has_been_greeted_pr(repo_id, username):
+        return
+
+    await _send_greeting(repo_full_name, pr_number, username, title, body, PR_WELCOME)
+    mark_greeted_pr(repo_id, username)
+
+
+async def _send_greeting(repo_full_name, number, username, title, body, template):
     await asyncio.sleep(2)
 
     lang = await detect_with_fallback(title, body)
@@ -57,6 +64,6 @@ async def _send_greeting(repo, number, username, title, body, template):
         message = await translate(message, lang)
 
     await github_post(
-        f"/repos/{repo}/issues/{number}/comments",
+        f"/repos/{repo_full_name}/issues/{number}/comments",
         {"body": message}
     )

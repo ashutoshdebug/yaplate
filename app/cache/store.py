@@ -95,13 +95,24 @@ def get_followup_data(key: str):
 
 # ---------------- GREET ----------------
 
-def has_been_greeted_pr(repo: str, username: str) -> bool:
-    r = get_redis()
-    return r.exists(f"{FIRST_PR_PREFIX}{repo}:{username}")
+# ---------------- GREET (rename-safe using repo_id) ----------------
 
-def mark_greeted_pr(repo: str, username: str):
+def has_been_greeted(repo_id: int, username: str) -> bool:
     r = get_redis()
-    r.set(f"{FIRST_PR_PREFIX}{repo}:{username}", 1)
+    return r.exists(f"{FIRST_ISSUE_PREFIX}{repo_id}:{username}")
+
+def mark_greeted(repo_id: int, username: str):
+    r = get_redis()
+    r.set(f"{FIRST_ISSUE_PREFIX}{repo_id}:{username}", 1)
+
+def has_been_greeted_pr(repo_id: int, username: str) -> bool:
+    r = get_redis()
+    return r.exists(f"{FIRST_PR_PREFIX}{repo_id}:{username}")
+
+def mark_greeted_pr(repo_id: int, username: str):
+    r = get_redis()
+    r.set(f"{FIRST_PR_PREFIX}{repo_id}:{username}", 1)
+
 
 
 # ---------------- STALE ----------------
