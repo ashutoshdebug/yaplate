@@ -2,6 +2,7 @@ import asyncio
 import time
 from httpx import HTTPStatusError
 
+from app.logger import get_logger
 from app.cache.store import (
     get_due_followups,
     get_followup_data,
@@ -11,6 +12,13 @@ from app.cache.store import (
     get_stale_data,
     cancel_stale,
     cancel_followup,
+    has_followup,
+    schedule_followup,
+    mark_repo_installed,
+    unmark_repo_installed,
+    is_repo_installed,
+    purge_orphaned_repos,
+    mark_user_seen,  # ✅ NEW (critical fix)
 )
 from app.github.api import github_post, github_get
 from app.nlp.lingo_client import translate
@@ -20,6 +28,8 @@ from app.settings import (
     MAX_FOLLOWUP_ATTEMPTS,
 )
 
+logger = get_logger("yaplate.workers.followup")
+
 FOLLOWUP_TEMPLATE = (
     "Just a gentle follow-up on this issue.\n"
     "When you get a chance, could you please share an update on the progress?"
@@ -28,28 +38,60 @@ FOLLOWUP_TEMPLATE = (
 STALE_TEMPLATE = "No response received. Marking this as stale."
 
 
-# --------------------------------------------------
-# Startup reconciliation (missed webhooks recovery)
-# --------------------------------------------------
+# =========================================================
+# Startup reconciliation
+# =========================================================
 
 async def reconcile_on_startup():
+    """
+    Rebuild authoritative state after downtime:
+    - Mark installed repos
+    - Seed follow-ups
+    - Seed greeting state (critical fix)
+    - Purge orphaned Redis state
+    """
     try:
         result = await list_installed_repos()
         repos = result.get("repositories", [])
         now = time.time()
 
+        installed = set()
+
         for repo_obj in repos:
-            full = repo_obj["full_name"]
+            full = repo_obj.get("full_name")
+            repo_id = repo_obj.get("id")
+
+            if not full or repo_id is None:
+                continue
+
+            installed.add(full)
+            mark_repo_installed(full)
 
             try:
                 issues = await list_open_assigned_issues(full)
             except Exception:
+                logger.exception("Failed to list assigned issues for %s", full)
                 continue
 
             for issue in issues:
-                number = issue["number"]
+                number = issue.get("number")
+                if number is None:
+                    continue
+
+                # --------------------------------------------------
+                # ✅ Seed greeting state (BUG FIX)
+                # --------------------------------------------------
+                author = issue.get("user", {}).get("login")
+                if author:
+                    mark_user_seen(repo_id, author)
+
                 assignees = issue.get("assignees", [])
-                labels = [l["name"].lower() for l in issue.get("labels", [])]
+                for a in assignees:
+                    login = a.get("login")
+                    if login:
+                        mark_user_seen(repo_id, login)
+
+                labels = [l.get("name", "").lower() for l in issue.get("labels", [])]
 
                 if not assignees:
                     continue
@@ -58,14 +100,14 @@ async def reconcile_on_startup():
                 if has_followup(full, number):
                     continue
 
-                assignee = assignees[0]["login"]
-                title = issue["title"]
+                assignee = assignees[0].get("login")
+                if not assignee:
+                    continue
+
+                title = issue.get("title", "")
                 body = issue.get("body") or ""
 
-                if not body.strip():
-                    lang = "en"
-                else:
-                    lang = await detect_with_fallback(title, body)
+                lang = "en" if not body.strip() else await detect_with_fallback(title, body)
                 due_at = now + FOLLOWUP_DEFAULT_INTERVAL_HOURS * 3600
 
                 schedule_followup(
@@ -76,27 +118,40 @@ async def reconcile_on_startup():
                     due_at=due_at,
                 )
 
-    except Exception as e:
-        print("Startup reconciliation error:", e)
+        purge_orphaned_repos(installed)
+
+    except Exception:
+        logger.exception("Startup reconciliation failed")
 
 
-# --------------------------------------------------
+# =========================================================
 # Follow-up processing
-# --------------------------------------------------
+# =========================================================
 
 async def process_followup(key: str):
     data = get_followup_data(key)
-    if not data or str(data.get("sent")) == "1" or "issue_number" not in data:
+    if not data or str(data.get("sent")) == "1":
+        return
+
+    repo = data.get("repo")
+    issue_number = data.get("issue_number")
+
+    if not repo or issue_number is None:
+        return
+
+    issue_number = int(issue_number)
+
+    if not is_repo_installed(repo):
+        cancel_followup(repo, issue_number)
+        cancel_stale(repo, issue_number)
         return
 
     attempt = int(data.get("attempt", 1))
     if attempt > MAX_FOLLOWUP_ATTEMPTS:
         return  # silent stop
 
-    repo = data["repo"]
-    issue_number = int(data["issue_number"])
-    assignee = data["assignee"]
-    lang = data["lang"]
+    assignee = data.get("assignee")
+    lang = data.get("lang", "en")
 
     # Safe fetch
     try:
@@ -107,8 +162,7 @@ async def process_followup(key: str):
             return
         raise
 
-    # Hard stop if already stale
-    labels = [l["name"].lower() for l in issue.get("labels", [])]
+    labels = [l.get("name", "").lower() for l in issue.get("labels", [])]
     if "stale" in labels:
         cancel_followup(repo, issue_number)
         cancel_stale(repo, issue_number)
@@ -116,10 +170,10 @@ async def process_followup(key: str):
 
     # Validate target
     if "pull_request" in issue:
-        if issue["user"]["login"] != assignee:
+        if issue.get("user", {}).get("login") != assignee:
             return
     else:
-        assignees = [u["login"] for u in issue.get("assignees", [])]
+        assignees = [u.get("login") for u in issue.get("assignees", [])]
         if assignee not in assignees:
             return
 
@@ -133,18 +187,32 @@ async def process_followup(key: str):
 
     mark_followup_sent(key)
 
-    if attempt <= MAX_FOLLOWUP_ATTEMPTS:
-        stale_at = time.time() + STALE_INTERVAL_HOURS * 3600
-        schedule_stale(repo, issue_number, lang, stale_at)
+    stale_at = time.time() + STALE_INTERVAL_HOURS * 3600
+    schedule_stale(repo, issue_number, lang, stale_at)
 
+
+# =========================================================
+# Stale processing
+# =========================================================
 
 async def process_stale(key: str):
     data = get_stale_data(key)
-    if not data or "issue_number" not in data:
+    if not data:
         return
 
-    repo = data["repo"]
-    issue_number = int(data["issue_number"])
+    repo = data.get("repo")
+    issue_number = data.get("issue_number")
+
+    if not repo or issue_number is None:
+        return
+
+    issue_number = int(issue_number)
+
+    if not is_repo_installed(repo):
+        cancel_stale(repo, issue_number)
+        cancel_followup(repo, issue_number)
+        return
+
     lang = data.get("lang", "en")
 
     try:
@@ -155,8 +223,7 @@ async def process_stale(key: str):
             return
         raise
 
-    # Do nothing if already stale
-    labels = [l["name"].lower() for l in issue.get("labels", [])]
+    labels = [l.get("name", "").lower() for l in issue.get("labels", [])]
     if "stale" in labels:
         cancel_stale(repo, issue_number)
         return
@@ -176,6 +243,10 @@ async def process_stale(key: str):
     cancel_stale(repo, issue_number)
 
 
+# =========================================================
+# Main worker loop
+# =========================================================
+
 async def followup_loop():
     while True:
         try:
@@ -187,7 +258,10 @@ async def followup_loop():
             for key in get_due_stales(now):
                 await process_stale(key)
 
-        except Exception as e:
-            print("Follow-up/Stale worker error:", e)
+        except asyncio.CancelledError:
+            logger.info("Follow-up scheduler cancelled")
+            raise
+        except Exception:
+            logger.exception("Follow-up scheduler error")
 
         await asyncio.sleep(FOLLOWUP_SCAN_INTERVAL_SECONDS)

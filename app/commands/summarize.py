@@ -27,7 +27,14 @@ Summaries:
     return await safe_llm_call(gemini_generate, prompt)
 
 
-async def summarize_thread(repo: str, issue_number: int, target_lang: str, trigger_text: str):
+async def summarize_thread(
+    repo: str,
+    issue_number: int,
+    target_lang: str,
+    trigger_text: str,
+):
+    trigger_text = trigger_text or ""
+
     comments = await get_issue_comments(repo, issue_number)
     context = build_thread_context(comments)
 
@@ -41,7 +48,9 @@ async def summarize_thread(repo: str, issue_number: int, target_lang: str, trigg
         s = await summarize_chunk(chunk)
         if s == FALLBACK_MESSAGE:
             formatted = format_thread_summary(FALLBACK_MESSAGE, target_lang)
-            quoted_trigger = "\n".join([f"> {line}" for line in trigger_text.splitlines()])
+            quoted_trigger = "\n".join(
+                f"> {line}" for line in trigger_text.splitlines()
+            )
             return f"{quoted_trigger}\n\n{formatted}"
 
         chunk_summaries.append(s)
@@ -49,17 +58,19 @@ async def summarize_thread(repo: str, issue_number: int, target_lang: str, trigg
     final_summary_en = await merge_summaries(chunk_summaries)
     if final_summary_en == FALLBACK_MESSAGE:
         formatted = format_thread_summary(FALLBACK_MESSAGE, target_lang)
-        quoted_trigger = "\n".join([f"> {line}" for line in trigger_text.splitlines()])
+        quoted_trigger = "\n".join(
+            f"> {line}" for line in trigger_text.splitlines()
+        )
         return f"{quoted_trigger}\n\n{formatted}"
-
 
     if target_lang != "en":
         final_summary = await translate(final_summary_en, target_lang)
     else:
         final_summary = final_summary_en
 
-    # Quote the triggering comment
-    quoted_trigger = "\n".join([f"> {line}" for line in trigger_text.splitlines()])
+    quoted_trigger = "\n".join(
+        f"> {line}" for line in trigger_text.splitlines()
+    )
 
     formatted_summary = format_thread_summary(final_summary, target_lang)
 

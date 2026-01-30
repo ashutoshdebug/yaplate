@@ -1,22 +1,28 @@
 import re
+from typing import List, Optional, Dict, Any
 
 BOT_MENTION = "@yaplate-bot"
 
 
-def strip_blockquotes(text: str):
+def strip_blockquotes(text: str) -> str:
+    text = text or ""
     return "\n".join(
         line for line in text.splitlines()
         if not line.lstrip().startswith(">")
     )
 
 
-def extract_translation_blocks(lines):
+def extract_translation_blocks(lines: List[str]) -> List[Dict[str, str]]:
     blocks = []
     i = 0
 
     while i < len(lines):
         line = lines[i]
-        m = re.search(r"Translation\s*\(([a-zA-Z\-]+)\)", line, re.IGNORECASE)
+        m = re.search(
+            r"Translation\s*\(([a-zA-Z\-]+)\)",
+            line,
+            re.IGNORECASE,
+        )
 
         if m:
             lang = m.group(1).lower()
@@ -28,7 +34,6 @@ def extract_translation_blocks(lines):
 
             buf = []
             while j < len(lines):
-                # stop at next Translation header or command
                 if re.search(r"Translation\s*\(", lines[j], re.IGNORECASE):
                     break
                 if lines[j].strip().startswith("@"):
@@ -41,7 +46,7 @@ def extract_translation_blocks(lines):
                 blocks.append({
                     "label": f"Translation ({lang})",
                     "lang": lang,
-                    "text": text
+                    "text": text,
                 })
 
             i = j
@@ -52,8 +57,7 @@ def extract_translation_blocks(lines):
     return blocks
 
 
-
-def extract_thread_summary(lines):
+def extract_thread_summary(lines: List[str]) -> Optional[str]:
     collecting = False
     buf = []
 
@@ -64,7 +68,10 @@ def extract_thread_summary(lines):
             continue
 
         if collecting:
-            if re.search(r"translation\s*\(", line.lower()) or line.strip().startswith("@"):
+            if (
+                re.search(r"translation\s*\(", line.lower())
+                or line.strip().startswith("@")
+            ):
                 break
             buf.append(line)
 
@@ -74,20 +81,25 @@ def extract_thread_summary(lines):
     return "\n".join(buf).strip() if buf else None
 
 
-def extract_proxy_reply(lines):
+def extract_proxy_reply(lines: List[str]) -> Optional[str]:
     for line in lines:
         if re.search(r"\]\([^)]+\)\s+says\s*:", line):
             return line.strip()
     return None
 
 
-def parse_translate_command(text: str):
+def parse_translate_command(text: str) -> Optional[Dict[str, Any]]:
+    text = text or ""
     clean = strip_blockquotes(text)
 
     if BOT_MENTION not in clean.lower():
         return None
 
-    lang_match = re.search(r"translate.*(?:to|in)\s+([a-zA-Z\-]+)", clean, re.IGNORECASE)
+    lang_match = re.search(
+        r"translate.*(?:to|in)\s+([a-zA-Z\-]+)",
+        clean,
+        re.IGNORECASE,
+    )
     if not lang_match:
         return None
 
@@ -96,28 +108,29 @@ def parse_translate_command(text: str):
     blockquote_lines = []
     for line in text.splitlines():
         if line.lstrip().startswith(">"):
-            blockquote_lines.append(re.sub(r"^\s*>+\s?", "", line))
+            blockquote_lines.append(
+                re.sub(r"^\s*>+\s?", "", line)
+            )
 
     if not blockquote_lines:
-        # Fallback: "double quoted"
         quote_match = re.search(r'"([^"]+)"', text, re.DOTALL)
         if quote_match:
             return {
                 "command": "translate",
                 "target_lang": target_lang,
                 "quoted_text": quote_match.group(1).strip(),
-                "quoted_label": None
+                "quoted_label": None,
             }
         return None
 
-    # 1️⃣ ORIGINAL Thread Summary (always highest priority)
+    # 1️⃣ Thread Summary (highest priority)
     summary_text = extract_thread_summary(blockquote_lines)
     if summary_text:
         return {
             "command": "translate",
             "target_lang": target_lang,
             "quoted_text": summary_text,
-            "quoted_label": "Thread Summary"
+            "quoted_label": "Thread Summary",
         }
 
     # 2️⃣ Proxy reply
@@ -127,11 +140,14 @@ def parse_translate_command(text: str):
             "command": "translate",
             "target_lang": target_lang,
             "quoted_text": proxy_line,
-            "quoted_label": "Proxy Reply"
+            "quoted_label": "Proxy Reply",
         }
 
-    # 3️⃣ Translation chain (re-translate last non-target language)
-    blocks = [b for b in extract_translation_blocks(blockquote_lines) if b["text"]]
+    # 3️⃣ Translation chain
+    blocks = [
+        b for b in extract_translation_blocks(blockquote_lines)
+        if b["text"]
+    ]
     if blocks:
         for b in reversed(blocks):
             if b["lang"] != target_lang:
@@ -139,16 +155,15 @@ def parse_translate_command(text: str):
                     "command": "translate",
                     "target_lang": target_lang,
                     "quoted_text": b["text"],
-                    "quoted_label": b["label"]
+                    "quoted_label": b["label"],
                 }
 
-        # All blocks already in same language → use last
         b = blocks[-1]
         return {
             "command": "translate",
             "target_lang": target_lang,
             "quoted_text": b["text"],
-            "quoted_label": b["label"]
+            "quoted_label": b["label"],
         }
 
     # 4️⃣ Raw quoted fallback
@@ -156,18 +171,22 @@ def parse_translate_command(text: str):
         "command": "translate",
         "target_lang": target_lang,
         "quoted_text": "\n".join(blockquote_lines).strip(),
-        "quoted_label": None
+        "quoted_label": None,
     }
 
 
-
-def parse_reply_command(text: str):
+def parse_reply_command(text: str) -> Optional[Dict[str, Any]]:
+    text = text or ""
     clean = strip_blockquotes(text)
 
     if BOT_MENTION not in clean.lower():
         return None
 
-    lang_match = re.search(r"reply.*(?:to|in)\s+([a-zA-Z\-]+)", clean, re.IGNORECASE)
+    lang_match = re.search(
+        r"reply.*(?:to|in)\s+([a-zA-Z\-]+)",
+        clean,
+        re.IGNORECASE,
+    )
     if not lang_match:
         return None
 
@@ -176,16 +195,21 @@ def parse_reply_command(text: str):
     quoted_lines = []
     for line in text.splitlines():
         if line.lstrip().startswith(">"):
-            quoted_lines.append(re.sub(r"^\s*>+\s?", "", line))
+            quoted_lines.append(
+                re.sub(r"^\s*>+\s?", "", line)
+            )
 
     if not quoted_lines:
         return None
 
     body_lines = []
     for line in text.splitlines():
-        if not line.strip().startswith(">") and BOT_MENTION not in line:
-            if line.strip():
-                body_lines.append(line.strip())
+        if (
+            not line.strip().startswith(">")
+            and BOT_MENTION not in line
+            and line.strip()
+        ):
+            body_lines.append(line.strip())
 
     if not body_lines:
         return None
@@ -194,11 +218,12 @@ def parse_reply_command(text: str):
         "command": "reply",
         "target_lang": target_lang,
         "parent_text": "\n".join(quoted_lines).strip(),
-        "speaker_text": "\n".join(body_lines).strip()
+        "speaker_text": "\n".join(body_lines).strip(),
     }
 
 
-def parse_summarize_command(text: str):
+def parse_summarize_command(text: str) -> Optional[Dict[str, Any]]:
+    text = text or ""
     clean = strip_blockquotes(text)
 
     if BOT_MENTION not in clean.lower():
@@ -207,10 +232,14 @@ def parse_summarize_command(text: str):
     if "summarize" not in clean.lower():
         return None
 
-    lang_match = re.search(r"summarize.*in\s+([a-zA-Z\-]+)", clean, re.IGNORECASE)
+    lang_match = re.search(
+        r"summarize.*in\s+([a-zA-Z\-]+)",
+        clean,
+        re.IGNORECASE,
+    )
     target_lang = lang_match.group(1).lower() if lang_match else "en"
 
     return {
         "command": "summarize",
-        "target_lang": target_lang
+        "target_lang": target_lang,
     }

@@ -1,3 +1,6 @@
+import asyncio
+
+from app.logger import get_logger
 from app.nlp.language_detect import detect_with_fallback
 from app.nlp.lingo_client import translate
 from app.github.api import github_post
@@ -7,7 +10,9 @@ from app.cache.store import (
     has_been_greeted_pr,
     mark_greeted_pr,
 )
-import asyncio
+
+
+logger = get_logger("yaplate.commands.greet")
 
 
 ISSUE_WELCOME = """Hi @{user}, welcome to the project!
@@ -39,7 +44,20 @@ async def greet_if_first_issue(repo_id, repo_full_name, issue_number, username, 
     if has_been_greeted(repo_id, username):
         return
 
-    await _send_greeting(repo_full_name, issue_number, username, title, body, ISSUE_WELCOME)
+    try:
+        await _send_greeting(
+            repo_full_name,
+            issue_number,
+            username,
+            title,
+            body,
+            ISSUE_WELCOME,
+        )
+    except RepoUnavailable:
+        logger.warning("Repo unavailable during issue greeting: %s", repo_full_name)
+        unmark_repo_installed(repo_full_name)
+        return
+
     mark_greeted(repo_id, username)
 
 
@@ -47,11 +65,41 @@ async def greet_if_first_pr(repo_id, repo_full_name, pr_number, username, title,
     if has_been_greeted_pr(repo_id, username):
         return
 
-    await _send_greeting(repo_full_name, pr_number, username, title, body, PR_WELCOME)
+    try:
+        await _send_greeting(
+            repo_full_name,
+            pr_number,
+            username,
+            title,
+            body,
+            PR_WELCOME,
+        )
+    except RepoUnavailable:
+        logger.warning("Repo unavailable during PR greeting: %s", repo_full_name)
+        unmark_repo_installed(repo_full_name)
+        return
+
     mark_greeted_pr(repo_id, username)
 
 
-async def _send_greeting(repo_full_name, number, username, title, body, template):
+# ---------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------
+
+async def _send_greeting(
+    repo_full_name: str,
+    number: int,
+    username: str,
+    title: str,
+    body: str,
+    template: str,
+):
+    # Normalize inputs defensively
+    username = username or ""
+    title = title or ""
+    body = body or ""
+
+    # Small delay to avoid racing GitHub UI
     await asyncio.sleep(2)
 
     lang = await detect_with_fallback(title, body)

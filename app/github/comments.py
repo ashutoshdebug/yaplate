@@ -1,4 +1,14 @@
-from app.github.api import github_post, github_patch, github_delete, get_repo_maintainers, github_get
+import asyncio
+import time
+from typing import Any, Dict
+
+from app.logger import get_logger
+from app.github.api import (
+    github_post,
+    github_patch,
+    github_delete,
+    get_repo_maintainers,
+)
 from app.commands.summarize import summarize_thread
 from app.commands.parser import (
     parse_summarize_command,
@@ -19,13 +29,17 @@ from app.cache.store import (
 from app.settings import FOLLOWUP_DEFAULT_INTERVAL_HOURS, MAX_FOLLOWUP_ATTEMPTS
 from app.nlp.context_builder import build_reply_context
 from app.nlp.semantic_check import wants_maintainer_attention
-import asyncio
-import time
+
+
+logger = get_logger("yaplate.github.comments")
+
+BOT_NAME = "yaplate-bot"
 
 
 def is_pure_quote(comment_body: str) -> bool:
     lines = [l.strip() for l in comment_body.strip().splitlines()]
-    return lines and all(line.startswith(">") for line in lines)
+    return bool(lines) and all(line.startswith(">") for line in lines)
+
 
 def extract_user_text(comment_body: str) -> str:
     return "\n".join(
@@ -34,148 +48,175 @@ def extract_user_text(comment_body: str) -> str:
     ).strip()
 
 
-async def handle_comment(payload):
-    action = payload.get("action")
+async def handle_comment(payload: Dict[str, Any]):
+    try:
+        action = payload.get("action")
+        comment = payload.get("comment") or {}
 
-    comment = payload["comment"]
-    comment_id = comment["id"]
-    comment_body = comment.get("body", "")
-    comment_user = comment["user"]["login"]
+        comment_id = comment.get("id")
+        comment_body = comment.get("body", "")
+        comment_user = comment.get("user", {}).get("login")
 
-    if comment_user.lower().endswith("[bot]") or comment_user.lower() == "yaplate-bot":
-        return
+        if not comment_id or not comment_user:
+            return
 
-    repo = payload["repository"]["full_name"]
-    issue_number = payload["issue"]["number"]
+        # Ignore bot's own messages
+        user_lower = comment_user.lower()
+        if user_lower.endswith("[bot]") or user_lower == BOT_NAME:
+            return
 
-    # -------------------------------------------------
-    # 0. Hard silence if already marked as stale
-    # -------------------------------------------------
-    issue = await github_get(f"/repos/{repo}/issues/{issue_number}")
-    labels = [l["name"].lower() for l in issue.get("labels", [])]
-    if "stale" in labels:
-        return
+        repository = payload.get("repository") or {}
+        issue = payload.get("issue") or {}
 
-    # -------------------------------------------------
-    # 1. Hard stop: pure quote
-    # -------------------------------------------------
-    if action == "created" and is_pure_quote(comment_body):
-        cancel_followup(repo, issue_number)
-        cancel_stale(repo, issue_number)
-        return
+        repo = repository.get("full_name")
+        issue_number = issue.get("number")
 
-    # -------------------------------------------------
-    # 2. Quote + text → maintainer escalation
-    # -------------------------------------------------
-    if action == "created" and comment_body.lstrip().startswith(">"):
-        user_text = extract_user_text(comment_body)
+        if not repo or issue_number is None:
+            return
 
-        if user_text and await wants_maintainer_attention(user_text):
-            maintainers = await get_repo_maintainers(repo)
-            if maintainers:
-                mentions = " ".join(f"@{m}" for m in maintainers)
-                await github_post(
-                    f"/repos/{repo}/issues/{issue_number}/comments",
-                    {
-                        "body": f"{mentions}\n\nThe author is waiting for maintainer / reviewer approval. Escalating and stopping automation."
-                    }
-                )
+        is_bot_command = f"@{BOT_NAME}" in comment_body.lower()
 
+        # --------------------------------------------------
+        # 1. Pure quote → hard stop
+        # --------------------------------------------------
+        if action == "created" and is_pure_quote(comment_body):
             cancel_followup(repo, issue_number)
             cancel_stale(repo, issue_number)
             return
 
-    # -------------------------------------------------
-    # 3. Normal reply → reset follow-up cycle
-    # -------------------------------------------------
-    if action == "created":
-        cancel_stale(repo, issue_number)
+        # --------------------------------------------------
+        # 2. Quote reply + human text → semantic escalation
+        # --------------------------------------------------
+        if (
+            action == "created"
+            and comment_body.lstrip().startswith(">")
+            and not is_bot_command
+        ):
+            user_text = extract_user_text(comment_body)
 
-        key = f"yaplate:followup:{repo}:{issue_number}"
-        data = get_followup_data(key)
+            if user_text and await wants_maintainer_attention(user_text):
+                maintainers = await get_repo_maintainers(repo)
+                if maintainers:
+                    mentions = " ".join(f"@{m}" for m in maintainers)
+                    await github_post(
+                        f"/repos/{repo}/issues/{issue_number}/comments",
+                        {
+                            "body": (
+                                f"{mentions}\n\n"
+                                "The author is waiting for maintainer / reviewer approval. "
+                                "Escalating and stopping automation."
+                            )
+                        },
+                    )
 
-        if data:
-            attempt = int(data.get("attempt", 1))
-            if attempt < MAX_FOLLOWUP_ATTEMPTS:
-                next_due = time.time() + FOLLOWUP_DEFAULT_INTERVAL_HOURS * 3600
-                reschedule_followup(repo, issue_number, next_due)
-            else:
                 cancel_followup(repo, issue_number)
+                cancel_stale(repo, issue_number)
+                return
 
-    # -------------------------------------------------
-    # 4. Handle user comment deletion
-    # -------------------------------------------------
-    if action == "deleted":
-        await asyncio.sleep(1.5)
-        bot_comment_id = get_comment_mapping(comment_id)
-        if bot_comment_id:
-            try:
-                await github_delete(f"/repos/{repo}/issues/comments/{bot_comment_id}")
-            except Exception:
-                pass
-            delete_comment_mapping(comment_id)
-        return
+        # --------------------------------------------------
+        # 3. Human progress reply → reset follow-up cycle
+        # --------------------------------------------------
+        if action == "created" and not is_bot_command:
+            cancel_stale(repo, issue_number)
 
-    # -------------------------------------------------
-    # 5. Parse commands
-    # -------------------------------------------------
-    summarize_parsed = parse_summarize_command(comment_body)
-    reply_parsed = parse_reply_command(comment_body)
-    translate_parsed = parse_translate_command(comment_body)
+            key = f"yaplate:followup:{repo}:{issue_number}"
+            data = get_followup_data(key)
 
-    if action == "edited" and not (summarize_parsed or reply_parsed or translate_parsed):
-        return
+            if data:
+                attempt = int(data.get("attempt", 1))
+                if attempt < MAX_FOLLOWUP_ATTEMPTS:
+                    next_due = time.time() + FOLLOWUP_DEFAULT_INTERVAL_HOURS * 3600
+                    reschedule_followup(repo, issue_number, next_due)
+                else:
+                    cancel_followup(repo, issue_number)
 
-    if summarize_parsed:
-        final_reply = await summarize_thread(
-            repo=repo,
-            issue_number=issue_number,
-            target_lang=summarize_parsed["target_lang"],
-            trigger_text=comment_body,
-        )
+        # --------------------------------------------------
+        # 4. User deleted comment → remove bot mirror
+        # --------------------------------------------------
+        if action == "deleted":
+            await asyncio.sleep(1.5)
 
-    elif reply_parsed:
-        ctx = build_reply_context(payload)
-        final_reply = await build_proxy_reply(
-            parent_text=reply_parsed["parent_text"],
-            speaker_text=reply_parsed["speaker_text"],
-            speaker_username=ctx["speaker_username"],
-            target_lang=reply_parsed["target_lang"],
-        )
+            bot_comment_id = get_comment_mapping(comment_id)
+            if bot_comment_id:
+                try:
+                    await github_delete(
+                        f"/repos/{repo}/issues/comments/{bot_comment_id}"
+                    )
+                except Exception:
+                    logger.exception(
+                        "Failed to delete mirrored bot comment: %s",
+                        bot_comment_id,
+                    )
 
-    elif translate_parsed:
-        final_reply = await translate_and_format(
-            translate_parsed["quoted_text"],
-            target_lang=translate_parsed["target_lang"],
-            quoted_label=translate_parsed.get("quoted_label"),
-            user_message=comment_body,
-        )
-    else:
-        return
+                delete_comment_mapping(comment_id)
+            return
 
-    # -------------------------------------------------
-    # 6. Redis-backed reply mapping
-    # -------------------------------------------------
-    if action == "created":
-        await asyncio.sleep(1.5)
-        response = await github_post(
-            f"/repos/{repo}/issues/{issue_number}/comments",
-            {"body": final_reply},
-        )
-        set_comment_mapping(comment_id, response["id"])
+        # --------------------------------------------------
+        # 5. Parse bot commands
+        # --------------------------------------------------
+        summarize_parsed = parse_summarize_command(comment_body)
+        reply_parsed = parse_reply_command(comment_body)
+        translate_parsed = parse_translate_command(comment_body)
 
-    elif action == "edited":
-        bot_comment_id = get_comment_mapping(comment_id)
-        await asyncio.sleep(1.5)
+        if action == "edited" and not (
+            summarize_parsed or reply_parsed or translate_parsed
+        ):
+            return
 
-        if bot_comment_id:
-            await github_patch(
-                f"/repos/{repo}/issues/comments/{bot_comment_id}",
-                {"body": final_reply},
+        if summarize_parsed:
+            final_reply = await summarize_thread(
+                repo=repo,
+                issue_number=issue_number,
+                target_lang=summarize_parsed["target_lang"],
+                trigger_text=comment_body,
+            )
+
+        elif reply_parsed:
+            ctx = build_reply_context(payload)
+            final_reply = await build_proxy_reply(
+                parent_text=reply_parsed["parent_text"],
+                speaker_text=reply_parsed["speaker_text"],
+                speaker_username=ctx["speaker_username"],
+                target_lang=reply_parsed["target_lang"],
+            )
+
+        elif translate_parsed:
+            final_reply = await translate_and_format(
+                translate_parsed["quoted_text"],
+                target_lang=translate_parsed["target_lang"],
+                quoted_label=translate_parsed.get("quoted_label"),
+                user_message=comment_body,
             )
         else:
+            return
+
+        # --------------------------------------------------
+        # 6. Redis-backed reply mapping
+        # --------------------------------------------------
+        await asyncio.sleep(1.5)
+
+        if action == "created":
             response = await github_post(
                 f"/repos/{repo}/issues/{issue_number}/comments",
                 {"body": final_reply},
             )
             set_comment_mapping(comment_id, response["id"])
+
+        elif action == "edited":
+            bot_comment_id = get_comment_mapping(comment_id)
+
+            if bot_comment_id:
+                await github_patch(
+                    f"/repos/{repo}/issues/comments/{bot_comment_id}",
+                    {"body": final_reply},
+                )
+            else:
+                response = await github_post(
+                    f"/repos/{repo}/issues/{issue_number}/comments",
+                    {"body": final_reply},
+                )
+                set_comment_mapping(comment_id, response["id"])
+
+    except Exception:
+        # Never crash comment processing
+        logger.exception("Unhandled error while processing comment event")

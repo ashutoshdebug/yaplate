@@ -1,37 +1,70 @@
-def build_reply_context(payload):
-    sender = payload["sender"]["login"]
-    return {
-        "speaker_username": sender
-    }
+from typing import Any, Dict, List
+
+from app.logger import get_logger
 
 
-def build_thread_context(comments):
+logger = get_logger("yaplate.nlp.context_builder")
+
+BOT_NAME = "yaplate-bot"
+
+
+def build_reply_context(payload: Dict[str, Any]) -> Dict[str, str]:
+    """
+    Build minimal context for proxy replies.
+    """
+    try:
+        sender = payload.get("sender", {}).get("login")
+        if sender:
+            return {"speaker_username": sender}
+    except Exception:
+        logger.exception("Failed to build reply context")
+
+    # Fallback: preserve contract
+    return {"speaker_username": ""}
+
+
+def build_thread_context(comments: List[Dict[str, Any]]) -> List[Dict[str, str]]:
     """
     Build clean thread context for summarization.
     Removes bot messages and keeps username attribution.
     """
-    cleaned = []
+    cleaned: List[Dict[str, str]] = []
+
     for c in comments:
-        user = c["user"]["login"]
-        body = c["body"]
+        try:
+            user = c.get("user", {}).get("login")
+            body = c.get("body")
 
-        # Skip bot messages
-        if user.lower().endswith("[bot]") or user.lower() == "yaplate-bot":
-            continue
+            if not user or body is None:
+                continue
 
-        cleaned.append({
-            "user": user,
-            "text": body
-        })
+            # Skip bot messages
+            user_l = user.lower()
+            if user_l.endswith("[bot]") or user_l == BOT_NAME:
+                continue
+
+            cleaned.append({
+                "user": user,
+                "text": body,
+            })
+        except Exception:
+            logger.exception("Failed to process comment for thread context")
 
     return cleaned
 
 
-def chunk_thread_context(context, chunk_size=15):
+def chunk_thread_context(
+    context: List[Dict[str, str]],
+    chunk_size: int = 15,
+) -> List[List[Dict[str, str]]]:
     """
     Split thread into chunks of N messages for hierarchical summarization.
     """
-    chunks = []
+    if chunk_size <= 0:
+        return []
+
+    chunks: List[List[Dict[str, str]]] = []
     for i in range(0, len(context), chunk_size):
         chunks.append(context[i:i + chunk_size])
+
     return chunks

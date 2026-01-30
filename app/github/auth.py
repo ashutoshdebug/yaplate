@@ -1,45 +1,97 @@
-import jwt
 import time
+from typing import Optional
+
 import httpx
+import jwt
+
+from app.logger import get_logger
 from app.settings import GITHUB_APP_ID, GITHUB_PRIVATE_KEY_PATH
 
-with open(GITHUB_PRIVATE_KEY_PATH, "r") as f:
-    PRIVATE_KEY = f.read()
 
-def create_jwt():
+logger = get_logger("yaplate.github.auth")
+
+_PRIVATE_KEY: Optional[str] = None
+_CACHED_TOKEN: Optional[str] = None
+_TOKEN_EXPIRY: float = 0.0
+
+
+def _load_private_key() -> str:
+    global _PRIVATE_KEY
+
+    if _PRIVATE_KEY is not None:
+        return _PRIVATE_KEY
+
+    if not GITHUB_PRIVATE_KEY_PATH:
+        raise RuntimeError("GITHUB_PRIVATE_KEY_PATH is not set")
+
+    try:
+        with open(GITHUB_PRIVATE_KEY_PATH, "r") as f:
+            _PRIVATE_KEY = f.read()
+            return _PRIVATE_KEY
+    except OSError as exc:
+        raise RuntimeError(
+            f"Failed to read GitHub private key at {GITHUB_PRIVATE_KEY_PATH}"
+        ) from exc
+
+
+def create_jwt() -> str:
+    if not GITHUB_APP_ID:
+        raise RuntimeError("GITHUB_APP_ID is not set")
+
     now = int(time.time())
     payload = {
         "iat": now - 30,
         "exp": now + 9 * 60,
-        "iss": int(GITHUB_APP_ID)
+        "iss": int(GITHUB_APP_ID),
     }
-    return jwt.encode(payload, PRIVATE_KEY, algorithm="RS256")
 
-async def get_installation_token():
+    private_key = _load_private_key()
+    return jwt.encode(payload, private_key, algorithm="RS256")
+
+
+async def get_installation_token() -> str:
+    """
+    Return a GitHub installation access token.
+    Cached until expiry to avoid unnecessary regeneration.
+    """
+    global _CACHED_TOKEN, _TOKEN_EXPIRY
+
+    now = time.time()
+    if _CACHED_TOKEN and now < _TOKEN_EXPIRY:
+        return _CACHED_TOKEN
+
     jwt_token = create_jwt()
 
     headers = {
         "Authorization": f"Bearer {jwt_token}",
-        "Accept": "application/vnd.github+json"
+        "Accept": "application/vnd.github+json",
     }
 
     async with httpx.AsyncClient() as client:
-        installations = await client.get(
+        installations_resp = await client.get(
             "https://api.github.com/app/installations",
-            headers=headers
+            headers=headers,
         )
+        installations_resp.raise_for_status()
 
-        print("GitHub App authenticated successfully")
+        installations = installations_resp.json()
+        if not installations:
+            raise RuntimeError("No GitHub App installations found")
 
-
-        installations.raise_for_status()
-
-        installation_id = installations.json()[0]["id"]
+        installation_id = installations[0]["id"]
 
         token_resp = await client.post(
             f"https://api.github.com/app/installations/{installation_id}/access_tokens",
-            headers=headers
+            headers=headers,
         )
         token_resp.raise_for_status()
 
-        return token_resp.json()["token"]
+        data = token_resp.json()
+
+        _CACHED_TOKEN = data["token"]
+        # GitHub tokens expire in 1 hour; subtract buffer
+        _TOKEN_EXPIRY = time.time() + 50 * 60
+
+        logger.info("GitHub installation token obtained")
+
+        return _CACHED_TOKEN

@@ -3,24 +3,56 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# === Raw environment values ===
+
 GITHUB_WEBHOOK_SECRET = os.getenv("GITHUB_WEBHOOK_SECRET")
+
 LINGO_API_KEY = os.getenv("LINGO_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-
-if not LINGO_API_KEY:
-    raise RuntimeError("LINGO_API_KEY is not set")
-
-if not GEMINI_API_KEY:
-    raise RuntimeError("GEMINI_API_KEY is not set")
 
 # GitHub App authentication
 GITHUB_APP_ID = os.getenv("GITHUB_APP_ID")
 GITHUB_PRIVATE_KEY_PATH = os.getenv("GITHUB_PRIVATE_KEY_PATH")
 
+# Follow-up configuration
 FOLLOWUP_ENABLED = os.getenv("FOLLOWUP_ENABLED", "true").lower() == "true"
-FOLLOWUP_DEFAULT_INTERVAL_HOURS = float(os.getenv("FOLLOWUP_DEFAULT_INTERVAL_HOURS", "48"))
-FOLLOWUP_SCAN_INTERVAL_SECONDS = float(os.getenv("FOLLOWUP_SCAN_INTERVAL_SECONDS", "600"))
+FOLLOWUP_DEFAULT_INTERVAL_HOURS = float(
+    os.getenv("FOLLOWUP_DEFAULT_INTERVAL_HOURS", "48")
+)
+FOLLOWUP_SCAN_INTERVAL_SECONDS = float(
+    os.getenv("FOLLOWUP_SCAN_INTERVAL_SECONDS", "600")
+)
 STALE_INTERVAL_HOURS = float(os.getenv("STALE_INTERVAL_HOURS", "72"))
 
-# NEW: maximum number of follow-up cycles
 MAX_FOLLOWUP_ATTEMPTS = int(os.getenv("MAX_FOLLOWUP_ATTEMPTS", "3"))
+
+
+def validate_llm_settings() -> None:
+    """
+    Validate required LLM configuration.
+
+    Raises RuntimeError if required keys are missing.
+    """
+    if not LINGO_API_KEY:
+        raise RuntimeError("LINGO_API_KEY is not set")
+
+    if not GEMINI_API_KEY:
+        raise RuntimeError("GEMINI_API_KEY is not set")
+
+
+def validate_github_settings() -> None:
+    """
+    Validate required GitHub App configuration.
+
+    Raises RuntimeError if required values are missing or invalid.
+    """
+    if not GITHUB_APP_ID:
+        raise RuntimeError("GITHUB_APP_ID is not set")
+
+    if not GITHUB_PRIVATE_KEY_PATH:
+        raise RuntimeError("GITHUB_PRIVATE_KEY_PATH is not set")
+
+    if not os.path.exists(GITHUB_PRIVATE_KEY_PATH):
+        raise RuntimeError(
+            f"GITHUB_PRIVATE_KEY_PATH does not exist: {GITHUB_PRIVATE_KEY_PATH}"
+        )
