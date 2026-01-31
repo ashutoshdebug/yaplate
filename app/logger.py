@@ -2,7 +2,7 @@ import logging
 from typing import Optional
 
 
-_DEFAULT_LOGGER_NAME = "yaplate-bot"
+_DEFAULT_LOGGER_NAME = "yaplate"
 _LOG_FORMAT = "[%(asctime)s] [%(levelname)s] %(name)s: %(message)s"
 
 

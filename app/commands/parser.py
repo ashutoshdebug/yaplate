@@ -1,7 +1,7 @@
 import re
 from typing import List, Optional, Dict, Any
 
-BOT_MENTION = "@yaplate-bot"
+BOT_MENTION = "@yaplate"
 
 
 def strip_blockquotes(text: str) -> str:

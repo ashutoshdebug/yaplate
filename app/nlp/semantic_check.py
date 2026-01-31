@@ -17,7 +17,7 @@ KEYWORDS = [
     "waiting for",
 ]
 
-BOT_MENTIONS = ["@yaplate-bot", "yaplate-bot"]
+BOT_MENTIONS = ["@yaplate-bot", "yaplate-bot", "yaplate"]
 
 
 async def wants_maintainer_attention(text: str) -> bool:

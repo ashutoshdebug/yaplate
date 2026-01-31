@@ -33,7 +33,7 @@ from app.nlp.semantic_check import wants_maintainer_attention
 
 logger = get_logger("yaplate.github.comments")
 
-BOT_NAME = "yaplate-bot"
+BOT_NAME = "yaplate"
 
 
 def is_pure_quote(comment_body: str) -> bool:
