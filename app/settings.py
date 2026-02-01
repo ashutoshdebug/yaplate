@@ -56,9 +56,14 @@ A few tips for a smooth review:
 Looking forward to reviewing your work. Happy coding!
 """
 
-FOLLOWUP_MESSAGE = (
+FOLLOWUP_ISSUE_MESSAGE = (
     "Just a gentle follow-up on this issue.\n"
-    "When you get a chance, could you please share an update on the progress? Custom"
+    "When you get a chance, could you please share an update on the progress?"
+)
+
+FOLLOWUP_PR_MESSAGE = (
+    "Just a gentle follow-up on this PR.\n"
+    "When you get a chance, could you please share an update on the progress?"
 )
 
 STALE_MESSAGE = "No response received. Marking this as stale."

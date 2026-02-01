@@ -18,7 +18,7 @@ from app.cache.store import (
     unmark_repo_installed,
     is_repo_installed,
     purge_orphaned_repos,
-    mark_user_seen,  # ✅ NEW (critical fix)
+    mark_user_seen,
 )
 from app.github.api import github_post, github_get
 from app.nlp.lingo_client import translate
@@ -27,15 +27,12 @@ from app.settings import (
     STALE_INTERVAL_HOURS,
     MAX_FOLLOWUP_ATTEMPTS,
     FOLLOWUP_DEFAULT_INTERVAL_HOURS,
-    FOLLOWUP_MESSAGE,
-    STALE_MESSAGE
+    FOLLOWUP_ISSUE_MESSAGE,
+    FOLLOWUP_PR_MESSAGE,
+    STALE_MESSAGE,
 )
 
 logger = get_logger("yaplate.workers.followup")
-
-FOLLOWUP_TEMPLATE = FOLLOWUP_MESSAGE
-
-STALE_TEMPLATE = STALE_MESSAGE
 
 
 # =========================================================
@@ -44,11 +41,7 @@ STALE_TEMPLATE = STALE_MESSAGE
 
 async def reconcile_on_startup():
     """
-    Rebuild authoritative state after downtime:
-    - Mark installed repos
-    - Seed follow-ups
-    - Seed greeting state (critical fix)
-    - Purge orphaned Redis state
+    Rebuild authoritative state after downtime.
     """
     try:
         result = await list_installed_repos()
@@ -78,9 +71,7 @@ async def reconcile_on_startup():
                 if number is None:
                     continue
 
-                # --------------------------------------------------
-                # ✅ Seed greeting state (BUG FIX)
-                # --------------------------------------------------
+                # Seed greeting state
                 author = issue.get("user", {}).get("login")
                 if author:
                     mark_user_seen(repo_id, author)
@@ -168,16 +159,18 @@ async def process_followup(key: str):
         cancel_stale(repo, issue_number)
         return
 
-    # Validate target
+    # Validate assignee
     if "pull_request" in issue:
         if issue.get("user", {}).get("login") != assignee:
             return
+        template = FOLLOWUP_PR_MESSAGE
     else:
         assignees = [u.get("login") for u in issue.get("assignees", [])]
         if assignee not in assignees:
             return
+        template = FOLLOWUP_ISSUE_MESSAGE
 
-    translated = await translate(FOLLOWUP_TEMPLATE, lang)
+    translated = await translate(template, lang)
     body = f"@{assignee}\n\n{translated}"
 
     await github_post(
@@ -228,7 +221,7 @@ async def process_stale(key: str):
         cancel_stale(repo, issue_number)
         return
 
-    translated = await translate(STALE_TEMPLATE, lang)
+    translated = await translate(STALE_MESSAGE, lang)
 
     await github_post(
         f"/repos/{repo}/issues/{issue_number}/comments",
