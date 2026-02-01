@@ -26,6 +26,44 @@ STALE_INTERVAL_HOURS = float(os.getenv("STALE_INTERVAL_HOURS", "72"))
 
 MAX_FOLLOWUP_ATTEMPTS = int(os.getenv("MAX_FOLLOWUP_ATTEMPTS", "3"))
 
+# Configurable messages
+
+FALLBACK_MESSAGE_TEMPLATE =  "LLM service is temporarily unavailable. Please try again later."
+
+ISSUE_WELCOME_MESSAGE = """Hi @{user}, welcome to the project!
+
+Thanks for opening your first issue here. We really appreciate you taking the time to report this.
+
+To help us resolve it faster:
+- Add clear reproduction steps
+- Share logs, screenshots, or error messages
+- Mention expected vs actual behavior
+- Custom message issue
+
+Feel free to ask if anything is unclear. Happy collaborating!
+"""
+
+PR_WELCOME_MESSAGE = """Hi @{user}, welcome to the project!
+
+Thanks for opening your first pull request — great to see your contribution!
+
+A few tips for a smooth review:
+- Make sure tests pass
+- Keep commits focused and well-described
+- Add context if the change is large
+- Custom message PR
+
+Looking forward to reviewing your work. Happy coding!
+"""
+
+FOLLOWUP_MESSAGE = (
+    "Just a gentle follow-up on this issue.\n"
+    "When you get a chance, could you please share an update on the progress? Custom"
+)
+
+STALE_MESSAGE = "No response received. Marking this as stale."
+
+
 
 def validate_llm_settings() -> None:
     """

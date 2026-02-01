@@ -26,16 +26,16 @@ from app.settings import (
     FOLLOWUP_SCAN_INTERVAL_SECONDS,
     STALE_INTERVAL_HOURS,
     MAX_FOLLOWUP_ATTEMPTS,
+    FOLLOWUP_DEFAULT_INTERVAL_HOURS,
+    FOLLOWUP_MESSAGE,
+    STALE_MESSAGE
 )
 
 logger = get_logger("yaplate.workers.followup")
 
-FOLLOWUP_TEMPLATE = (
-    "Just a gentle follow-up on this issue.\n"
-    "When you get a chance, could you please share an update on the progress?"
-)
+FOLLOWUP_TEMPLATE = FOLLOWUP_MESSAGE
 
-STALE_TEMPLATE = "No response received. Marking this as stale."
+STALE_TEMPLATE = STALE_MESSAGE
 
 
 # =========================================================

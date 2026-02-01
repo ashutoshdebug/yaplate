@@ -1,9 +1,10 @@
 from app.logger import get_logger
+from app.settings import FALLBACK_MESSAGE_TEMPLATE
 
 
 logger = get_logger("yaplate.llm")
 
-FALLBACK_MESSAGE = "LLM service is temporarily unavailable. Please try again later."
+FALLBACK_MESSAGE = FALLBACK_MESSAGE_TEMPLATE
 
 
 async def safe_llm_call(fn, *args, **kwargs):

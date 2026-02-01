@@ -10,34 +10,14 @@ from app.cache.store import (
     has_been_greeted_pr,
     mark_greeted_pr,
 )
-
+from app.settings import ISSUE_WELCOME_MESSAGE, PR_WELCOME_MESSAGE
 
 logger = get_logger("yaplate.commands.greet")
 
 
-ISSUE_WELCOME = """Hi @{user}, welcome to the project!
+ISSUE_WELCOME = ISSUE_WELCOME_MESSAGE
 
-Thanks for opening your first issue here. We really appreciate you taking the time to report this.
-
-To help us resolve it faster:
-- Add clear reproduction steps
-- Share logs, screenshots, or error messages
-- Mention expected vs actual behavior
-
-Feel free to ask if anything is unclear. Happy collaborating!
-"""
-
-PR_WELCOME = """Hi @{user}, welcome to the project!
-
-Thanks for opening your first pull request — great to see your contribution!
-
-A few tips for a smooth review:
-- Make sure tests pass
-- Keep commits focused and well-described
-- Add context if the change is large
-
-Looking forward to reviewing your work. Happy coding!
-"""
+PR_WELCOME = PR_WELCOME_MESSAGE
 
 
 async def greet_if_first_issue(repo_id, repo_full_name, issue_number, username, title, body):
