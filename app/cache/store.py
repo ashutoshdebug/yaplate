@@ -2,9 +2,14 @@ import time
 from typing import Iterable
 
 from app.cache.keys import (
-    FOLLOWUP_PREFIX, FOLLOWUP_INDEX, KEY_PREFIX,
-    FIRST_ISSUE_PREFIX, FIRST_PR_PREFIX,
-    STALE_PREFIX, STALE_INDEX
+    KEY_PREFIX,
+    FIRST_ISSUE_PREFIX,
+    FIRST_PR_PREFIX,
+    FOLLOWUP_PREFIX,
+    FOLLOWUP_INDEX,
+    STALE_PREFIX,
+    STALE_INDEX,
+    INSTALLED_REPO_PREFIX,
 )
 from app.cache.redis_client import get_redis
 from app.logger import get_logger
@@ -129,7 +134,8 @@ def has_been_greeted(repo_id: int, username: str) -> bool:
         logger.exception("Failed to check greeting state")
         return False
 
-def mark_greeted(repo: str, username: str):
+
+def mark_greeted(repo_id: int, username: str):
     r = get_redis()
     try:
         r.set(f"{FIRST_ISSUE_PREFIX}{repo_id}:{username}", 1)
@@ -183,6 +189,9 @@ def mark_greeted_pr(repo_id: int, username: str):
 # =========================================================
 
 def schedule_followup(repo: str, issue_number: int, assignee: str, lang: str, due_at: float, attempt: int = 1):
+    if not is_repo_installed(repo):
+        return
+
     r = get_redis()
     key = f"{FOLLOWUP_PREFIX}{repo}:{issue_number}"
 
@@ -200,10 +209,8 @@ def schedule_followup(repo: str, issue_number: int, assignee: str, lang: str, du
     except Exception:
         logger.exception("Failed to schedule followup: %s #%s", repo, issue_number)
 
+
 def reschedule_followup(repo: str, issue_number: int, next_due_at: float):
-    """
-    Increase attempt counter and reschedule follow-up.
-    """
     r = get_redis()
     key = f"{FOLLOWUP_PREFIX}{repo}:{issue_number}"
 
@@ -238,6 +245,7 @@ def cancel_followup(repo: str, issue_number: int):
         r.zrem(STALE_INDEX, stale_key)
     except Exception:
         logger.exception("Failed to cancel followup: %s #%s", repo, issue_number)
+
 
 def get_due_followups(now: float):
     r = get_redis()
@@ -275,9 +283,14 @@ def has_followup(repo: str, issue_number: int) -> bool:
         return False
 
 
-# ---------------- STALE ----------------
+# =========================================================
+# Stale handling
+# =========================================================
 
 def schedule_stale(repo: str, issue_number: int, lang: str, due_at: float):
+    if not is_repo_installed(repo):
+        return
+
     r = get_redis()
     key = f"{STALE_PREFIX}{repo}:{issue_number}"
 
@@ -291,6 +304,7 @@ def schedule_stale(repo: str, issue_number: int, lang: str, due_at: float):
         r.zadd(STALE_INDEX, {key: due_at})
     except Exception:
         logger.exception("Failed to schedule stale: %s #%s", repo, issue_number)
+
 
 def cancel_stale(repo: str, issue_number: int):
     r = get_redis()

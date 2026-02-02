@@ -3,12 +3,14 @@ import asyncio
 from app.logger import get_logger
 from app.nlp.language_detect import detect_with_fallback
 from app.nlp.lingo_client import translate
-from app.github.api import github_post
+from app.github.api import github_post, RepoUnavailable
 from app.cache.store import (
     has_been_greeted,
     mark_greeted,
     has_been_greeted_pr,
     mark_greeted_pr,
+    is_repo_installed,
+    unmark_repo_installed,
 )
 from app.settings import ISSUE_WELCOME_MESSAGE, PR_WELCOME_MESSAGE
 
@@ -20,7 +22,22 @@ ISSUE_WELCOME = ISSUE_WELCOME_MESSAGE
 PR_WELCOME = PR_WELCOME_MESSAGE
 
 
-async def greet_if_first_issue(repo_id, repo_full_name, issue_number, username, title, body):
+# ---------------------------------------------------------
+# Public API
+# ---------------------------------------------------------
+
+async def greet_if_first_issue(
+    repo_id: int,
+    repo_full_name: str,
+    issue_number: int,
+    username: str,
+    title: str,
+    body: str,
+):
+    # Hard guard: repo must still be installed
+    if not is_repo_installed(repo_full_name):
+        return
+
     if has_been_greeted(repo_id, username):
         return
 
@@ -41,7 +58,18 @@ async def greet_if_first_issue(repo_id, repo_full_name, issue_number, username, 
     mark_greeted(repo_id, username)
 
 
-async def greet_if_first_pr(repo_id, repo_full_name, pr_number, username, title, body):
+async def greet_if_first_pr(
+    repo_id: int,
+    repo_full_name: str,
+    pr_number: int,
+    username: str,
+    title: str,
+    body: str,
+):
+    # Hard guard: repo must still be installed
+    if not is_repo_installed(repo_full_name):
+        return
+
     if has_been_greeted_pr(repo_id, username):
         return
 
@@ -93,5 +121,5 @@ async def _send_greeting(
 
     await github_post(
         f"/repos/{repo_full_name}/issues/{number}/comments",
-        {"body": message}
+        {"body": message},
     )

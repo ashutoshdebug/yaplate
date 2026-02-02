@@ -71,38 +71,40 @@ async def _request(
 # Public helpers (unchanged behavior)
 # =========================================================
 
+async def github_post(endpoint: str, json: dict):
+    return await _request("POST", endpoint, json)
+
+
 async def github_patch(endpoint: str, json: dict):
-    headers = await _headers()
-    async with httpx.AsyncClient() as client:
-        r = await client.patch(f"{GITHUB_API}{endpoint}", headers=headers, json=json)
-        r.raise_for_status()
-        return r.json()
+    return await _request("PATCH", endpoint, json)
+
 
 async def github_get(endpoint: str):
-    headers = await _headers()
-    async with httpx.AsyncClient() as client:
-        r = await client.get(f"{GITHUB_API}{endpoint}", headers=headers)
-        r.raise_for_status()
-        return r.json()
+    return await _request("GET", endpoint)
+
 
 async def github_delete(endpoint: str) -> bool:
     await _request("DELETE", endpoint)
     return True
+
 
 async def get_issue_comments(repo: str, issue_number: int):
     return await github_get(
         f"/repos/{repo}/issues/{issue_number}/comments?per_page=100"
     )
 
+
 async def get_user_issues(repo: str, username: str):
     return await github_get(
         f"/search/issues?q=repo:{repo}+type:issue+author:{username}"
     )
 
+
 async def get_user_prs(repo: str, username: str):
     return await github_get(
         f"/search/issues?q=repo:{repo}+type:pr+author:{username}"
     )
+
 
 async def get_repo_maintainers(repo: str):
     owners = await github_get(

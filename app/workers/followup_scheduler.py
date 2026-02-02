@@ -1,6 +1,5 @@
 import asyncio
 import time
-from httpx import HTTPStatusError
 
 from app.logger import get_logger
 from app.cache.store import (
@@ -20,8 +19,15 @@ from app.cache.store import (
     purge_orphaned_repos,
     mark_user_seen,
 )
-from app.github.api import github_post, github_get
+from app.github.api import (
+    github_post,
+    github_get,
+    RepoUnavailable,
+    list_installed_repos,
+    list_open_assigned_issues,
+)
 from app.nlp.lingo_client import translate
+from app.nlp.language_detect import detect_with_fallback
 from app.settings import (
     FOLLOWUP_SCAN_INTERVAL_SECONDS,
     STALE_INTERVAL_HOURS,
@@ -62,6 +68,8 @@ async def reconcile_on_startup():
 
             try:
                 issues = await list_open_assigned_issues(full)
+            except RepoUnavailable:
+                continue
             except Exception:
                 logger.exception("Failed to list assigned issues for %s", full)
                 continue
@@ -139,19 +147,16 @@ async def process_followup(key: str):
 
     attempt = int(data.get("attempt", 1))
     if attempt > MAX_FOLLOWUP_ATTEMPTS:
-        return  # silent stop
+        return
 
     assignee = data.get("assignee")
     lang = data.get("lang", "en")
 
-    # Safe fetch
     try:
         issue = await github_get(f"/repos/{repo}/issues/{issue_number}")
-    except HTTPStatusError as e:
-        if e.response.status_code == 404:
-            cancel_followup(repo, issue_number)
-            return
-        raise
+    except RepoUnavailable:
+        unmark_repo_installed(repo)
+        return
 
     labels = [l.get("name", "").lower() for l in issue.get("labels", [])]
     if "stale" in labels:
@@ -173,10 +178,14 @@ async def process_followup(key: str):
     translated = await translate(template, lang)
     body = f"@{assignee}\n\n{translated}"
 
-    await github_post(
-        f"/repos/{repo}/issues/{issue_number}/comments",
-        {"body": body}
-    )
+    try:
+        await github_post(
+            f"/repos/{repo}/issues/{issue_number}/comments",
+            {"body": body},
+        )
+    except RepoUnavailable:
+        unmark_repo_installed(repo)
+        return
 
     mark_followup_sent(key)
 
@@ -210,11 +219,9 @@ async def process_stale(key: str):
 
     try:
         issue = await github_get(f"/repos/{repo}/issues/{issue_number}")
-    except HTTPStatusError as e:
-        if e.response.status_code == 404:
-            cancel_stale(repo, issue_number)
-            return
-        raise
+    except RepoUnavailable:
+        unmark_repo_installed(repo)
+        return
 
     labels = [l.get("name", "").lower() for l in issue.get("labels", [])]
     if "stale" in labels:
@@ -223,15 +230,18 @@ async def process_stale(key: str):
 
     translated = await translate(STALE_MESSAGE, lang)
 
-    await github_post(
-        f"/repos/{repo}/issues/{issue_number}/comments",
-        {"body": translated}
-    )
-
-    await github_post(
-        f"/repos/{repo}/issues/{issue_number}/labels",
-        {"labels": ["stale"]}
-    )
+    try:
+        await github_post(
+            f"/repos/{repo}/issues/{issue_number}/comments",
+            {"body": translated},
+        )
+        await github_post(
+            f"/repos/{repo}/issues/{issue_number}/labels",
+            {"labels": ["stale"]},
+        )
+    except RepoUnavailable:
+        unmark_repo_installed(repo)
+        return
 
     cancel_stale(repo, issue_number)
 
@@ -241,6 +251,8 @@ async def process_stale(key: str):
 # =========================================================
 
 async def followup_loop():
+    await reconcile_on_startup()
+
     while True:
         try:
             now = time.time()

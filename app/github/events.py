@@ -4,10 +4,19 @@ from typing import Any, Dict
 from app.logger import get_logger
 from app.github.comments import handle_comment
 from app.commands.greet import greet_if_first_issue, greet_if_first_pr
-from app.cache.store import schedule_followup, cancel_followup, cancel_stale
+from app.cache.store import (
+    schedule_followup,
+    cancel_followup,
+    cancel_stale,
+    purge_repo,
+    purge_all,
+    migrate_repo,
+    mark_repo_installed,
+    unmark_repo_installed,
+)
 from app.nlp.language_detect import detect_with_fallback
 from app.settings import FOLLOWUP_DEFAULT_INTERVAL_HOURS
-import time
+from app.github.api import RepoUnavailable
 
 
 logger = get_logger("yaplate.github.events")

@@ -23,7 +23,11 @@ BOT_MENTIONS = ["@yaplate-bot", "yaplate-bot", "yaplate"]
 async def wants_maintainer_attention(text: str) -> bool:
     text_l = text.lower()
 
-    # 1. Deterministic keyword gate (fast + safe)
+    # 0. Ignore if user is talking to the bot
+    if any(b in text_l for b in BOT_MENTIONS):
+        return False
+
+    # 1. Deterministic keyword gate
     if any(k in text_l for k in KEYWORDS):
         return True
 
