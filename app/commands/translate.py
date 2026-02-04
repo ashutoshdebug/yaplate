@@ -6,10 +6,14 @@ from app.nlp.llm_guard import FALLBACK_MESSAGE
 
 
 def clean_markdown(text: str) -> str:
+    """
+    Keep markdown structure. Only remove Yaplate's own translation headers
+    if present.
+    """
     text = text or ""
-    text = re.sub(r"\*{1,3}", "", text)
-    text = re.sub(r"Translation\s*\([a-zA-Z\-]+\)\s*:", "", text)
+    text = re.sub(r"^Translation\s*\([a-zA-Z\-]+\)\s*:?\s*$", "", text, flags=re.IGNORECASE | re.MULTILINE)
     return text.strip()
+
 
 
 async def translate_and_format(
