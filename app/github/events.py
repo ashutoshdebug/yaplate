@@ -13,6 +13,7 @@ from app.cache.store import (
     migrate_repo,
     mark_repo_installed,
     unmark_repo_installed,
+    clear_followup_stopped
 )
 from app.nlp.language_detect import detect_with_fallback
 from app.settings import FOLLOWUP_DEFAULT_INTERVAL_HOURS
@@ -152,6 +153,7 @@ async def handle_event(event_type: str, payload: Dict[str, Any]):
                 elif action in ("unassigned", "closed", "deleted"):
                     cancel_followup(repo_full, issue_number)
                     cancel_stale(repo_full, issue_number)
+                    clear_followup_stopped(repo_full, issue_number)
 
             except RepoUnavailable:
                 cancel_followup(repo_full, issue_number)

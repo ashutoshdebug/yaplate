@@ -44,3 +44,5 @@ INSTALLED_REPO_PREFIX = "yaplate:installed_repo:"
 # (Optional, future-proofing)
 # Track installation ids if you later want multi-install isolation
 # INSTALLATION_PREFIX = "yaplate:installation:"
+
+FOLLOWUP_STOPPED_PREFIX = "yaplate:followup_stopped:"

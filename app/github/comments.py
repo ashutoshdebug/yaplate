@@ -25,6 +25,7 @@ from app.cache.store import (
     cancel_stale,
     reschedule_followup,
     get_followup_data,
+    mark_followup_stopped
 )
 from app.settings import FOLLOWUP_DEFAULT_INTERVAL_HOURS, MAX_FOLLOWUP_ATTEMPTS
 from app.nlp.context_builder import build_reply_context
@@ -82,6 +83,7 @@ async def handle_comment(payload: Dict[str, Any]):
         if action == "created" and is_pure_quote(comment_body):
             cancel_followup(repo, issue_number)
             cancel_stale(repo, issue_number)
+            mark_followup_stopped(repo, issue_number)
             return
 
         # --------------------------------------------------
@@ -111,6 +113,7 @@ async def handle_comment(payload: Dict[str, Any]):
 
                 cancel_followup(repo, issue_number)
                 cancel_stale(repo, issue_number)
+                mark_followup_stopped(repo, issue_number)
                 return
 
         # --------------------------------------------------
@@ -118,6 +121,11 @@ async def handle_comment(payload: Dict[str, Any]):
         # --------------------------------------------------
         if action == "created" and not is_bot_command:
             cancel_stale(repo, issue_number)
+
+            if await wants_maintainer_attention(comment_body):
+                cancel_followup(repo, issue_number)
+                mark_followup_stopped(repo, issue_number)
+                return
 
             key = f"yaplate:followup:{repo}:{issue_number}"
             data = get_followup_data(key)

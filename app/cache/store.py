@@ -10,6 +10,7 @@ from app.cache.keys import (
     STALE_PREFIX,
     STALE_INDEX,
     INSTALLED_REPO_PREFIX,
+    FOLLOWUP_STOPPED_PREFIX
 )
 from app.cache.redis_client import get_redis
 from app.logger import get_logger
@@ -396,3 +397,17 @@ def purge_all():
             r.delete(key)
     except Exception:
         logger.exception("Failed to purge all keys")
+
+
+def mark_followup_stopped(repo: str, issue_number: int):
+    r = get_redis()
+    key = f"{FOLLOWUP_STOPPED_PREFIX}{repo}:{issue_number}"
+    r.set(key, 1)
+
+def is_followup_stopped(repo: str, issue_number: int) -> bool:
+    r = get_redis()
+    return bool(r.exists(f"{FOLLOWUP_STOPPED_PREFIX}{repo}:{issue_number}"))
+
+def clear_followup_stopped(repo: str, issue_number: int):
+    r = get_redis()
+    r.delete(f"{FOLLOWUP_STOPPED_PREFIX}{repo}:{issue_number}")

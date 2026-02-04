@@ -18,6 +18,7 @@ from app.cache.store import (
     is_repo_installed,
     purge_orphaned_repos,
     mark_user_seen,
+    is_followup_stopped
 )
 from app.github.api import (
     github_post,
@@ -98,7 +99,8 @@ async def reconcile_on_startup():
                     continue
                 if has_followup(full, number):
                     continue
-
+                if is_followup_stopped(full, number):
+                    continue
                 assignee = assignees[0].get("login")
                 if not assignee:
                     continue
