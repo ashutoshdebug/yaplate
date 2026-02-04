@@ -25,17 +25,21 @@ from app.cache.store import (
     cancel_stale,
     reschedule_followup,
     get_followup_data,
-    mark_followup_stopped
+    mark_followup_stopped,
+    mark_followup_completed
 )
 from app.settings import FOLLOWUP_DEFAULT_INTERVAL_HOURS, MAX_FOLLOWUP_ATTEMPTS
 from app.nlp.context_builder import build_reply_context
 from app.nlp.semantic_check import wants_maintainer_attention
 
-
 logger = get_logger("yaplate.github.comments")
 
 BOT_NAME = "yaplate"
 
+
+# --------------------------------------------------
+# Helpers
+# --------------------------------------------------
 
 def is_pure_quote(comment_body: str) -> bool:
     lines = [l.strip() for l in comment_body.strip().splitlines()]
@@ -49,6 +53,43 @@ def extract_user_text(comment_body: str) -> str:
     ).strip()
 
 
+async def stop_followups_with_notice(
+    repo: str,
+    issue_number: int,
+    reason: str,
+    mention_maintainers: bool = True,
+):
+    """
+    Hard-stop follow-up & stale automation and post a visible explanation.
+    This is the ONLY place where mark_followup_stopped() is allowed.
+    """
+    mentions = ""
+
+    if mention_maintainers:
+        maintainers = await get_repo_maintainers(repo)
+        if maintainers:
+            mentions = " ".join(f"@{m}" for m in maintainers)
+
+    body = (
+        f"{mentions}\n\n"
+        "🤖 **Automation paused**\n\n"
+        f"{reason}"
+    ).strip()
+
+    await github_post(
+        f"/repos/{repo}/issues/{issue_number}/comments",
+        {"body": body},
+    )
+
+    cancel_followup(repo, issue_number)
+    cancel_stale(repo, issue_number)
+    mark_followup_stopped(repo, issue_number)
+
+
+# --------------------------------------------------
+# Main handler
+# --------------------------------------------------
+
 async def handle_comment(payload: Dict[str, Any]):
     try:
         action = payload.get("action")
@@ -61,7 +102,7 @@ async def handle_comment(payload: Dict[str, Any]):
         if not comment_id or not comment_user:
             return
 
-        # Ignore bot's own messages
+        # Ignore bot's own comments
         user_lower = comment_user.lower()
         if user_lower.endswith("[bot]") or user_lower == BOT_NAME:
             return
@@ -78,16 +119,22 @@ async def handle_comment(payload: Dict[str, Any]):
         is_bot_command = f"@{BOT_NAME}" in comment_body.lower()
 
         # --------------------------------------------------
-        # 1. Pure quote → hard stop
+        # 1. Pure quote → hard stop (explicit disengagement)
         # --------------------------------------------------
         if action == "created" and is_pure_quote(comment_body):
-            cancel_followup(repo, issue_number)
-            cancel_stale(repo, issue_number)
-            mark_followup_stopped(repo, issue_number)
+            await stop_followups_with_notice(
+                repo,
+                issue_number,
+                reason=(
+                    "The author replied only with a quoted message, "
+                    "indicating no further automated follow-ups are needed."
+                ),
+                mention_maintainers=False,
+            )
             return
 
         # --------------------------------------------------
-        # 2. Quote reply + human text → semantic escalation
+        # 2. Quote reply + human text → possible escalation
         # --------------------------------------------------
         if (
             action == "created"
@@ -97,36 +144,52 @@ async def handle_comment(payload: Dict[str, Any]):
             user_text = extract_user_text(comment_body)
 
             if user_text and await wants_maintainer_attention(user_text):
-                maintainers = await get_repo_maintainers(repo)
-                if maintainers:
-                    mentions = " ".join(f"@{m}" for m in maintainers)
-                    await github_post(
-                        f"/repos/{repo}/issues/{issue_number}/comments",
-                        {
-                            "body": (
-                                f"{mentions}\n\n"
-                                "The author is waiting for maintainer / reviewer approval. "
-                                "Escalating and stopping automation."
-                            )
-                        },
-                    )
-
-                cancel_followup(repo, issue_number)
-                cancel_stale(repo, issue_number)
-                mark_followup_stopped(repo, issue_number)
+                await stop_followups_with_notice(
+                    repo,
+                    issue_number,
+                    reason=(
+                        "The author indicated they are waiting for maintainer "
+                        "review or approval. Escalating and pausing automation."
+                    ),
+                    mention_maintainers=True,
+                )
                 return
 
+            # Otherwise: quote reply = acknowledgement → pause only
+            cancel_stale(repo, issue_number)
+
+            key = f"yaplate:followup:{repo}:{issue_number}"
+            data = get_followup_data(key)
+            if data:
+                attempt = int(data.get("attempt", 1))
+                if attempt < MAX_FOLLOWUP_ATTEMPTS:
+                    next_due = time.time() + FOLLOWUP_DEFAULT_INTERVAL_HOURS * 3600
+                    reschedule_followup(repo, issue_number, next_due)
+                else:
+                    cancel_followup(repo, issue_number)
+                    mark_followup_completed(repo, issue_number)
+            return
+
         # --------------------------------------------------
-        # 3. Human progress reply → reset follow-up cycle
+        # 3. Normal human reply → progress or pause
         # --------------------------------------------------
         if action == "created" and not is_bot_command:
             cancel_stale(repo, issue_number)
 
+            # Plain-text maintainer wait → stop WITH notice
             if await wants_maintainer_attention(comment_body):
-                cancel_followup(repo, issue_number)
-                mark_followup_stopped(repo, issue_number)
+                await stop_followups_with_notice(
+                    repo,
+                    issue_number,
+                    reason=(
+                        "The author indicated they are blocked or waiting for "
+                        "maintainer action. Follow-up reminders have been paused."
+                    ),
+                    mention_maintainers=True,
+                )
                 return
 
+            # Otherwise: normal progress → reschedule follow-up
             key = f"yaplate:followup:{repo}:{issue_number}"
             data = get_followup_data(key)
 
@@ -137,6 +200,7 @@ async def handle_comment(payload: Dict[str, Any]):
                     reschedule_followup(repo, issue_number, next_due)
                 else:
                     cancel_followup(repo, issue_number)
+                    mark_followup_completed(repo, issue_number)
 
         # --------------------------------------------------
         # 4. User deleted comment → remove bot mirror

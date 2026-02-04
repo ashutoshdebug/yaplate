@@ -10,7 +10,8 @@ from app.cache.keys import (
     STALE_PREFIX,
     STALE_INDEX,
     INSTALLED_REPO_PREFIX,
-    FOLLOWUP_STOPPED_PREFIX
+    FOLLOWUP_STOPPED_PREFIX,
+    FOLLOWUP_COMPLETED_PREFIX
 )
 from app.cache.redis_client import get_redis
 from app.logger import get_logger
@@ -282,6 +283,20 @@ def has_followup(repo: str, issue_number: int) -> bool:
     except Exception:
         logger.exception("Failed to check followup existence")
         return False
+
+def mark_followup_completed(repo: str, issue_number: int):
+    r = get_redis()
+    r.set(f"{FOLLOWUP_COMPLETED_PREFIX}{repo}:{issue_number}", 1)
+
+
+def is_followup_completed(repo: str, issue_number: int) -> bool:
+    r = get_redis()
+    return bool(r.exists(f"{FOLLOWUP_COMPLETED_PREFIX}{repo}:{issue_number}"))
+
+
+def clear_followup_completed(repo: str, issue_number: int):
+    r = get_redis()
+    r.delete(f"{FOLLOWUP_COMPLETED_PREFIX}{repo}:{issue_number}")
 
 
 # =========================================================

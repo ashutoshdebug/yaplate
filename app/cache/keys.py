@@ -46,3 +46,4 @@ INSTALLED_REPO_PREFIX = "yaplate:installed_repo:"
 # INSTALLATION_PREFIX = "yaplate:installation:"
 
 FOLLOWUP_STOPPED_PREFIX = "yaplate:followup_stopped:"
+FOLLOWUP_COMPLETED_PREFIX = "yaplate:followup_completed:"

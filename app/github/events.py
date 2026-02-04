@@ -13,7 +13,8 @@ from app.cache.store import (
     migrate_repo,
     mark_repo_installed,
     unmark_repo_installed,
-    clear_followup_stopped
+    clear_followup_stopped,
+    clear_followup_completed
 )
 from app.nlp.language_detect import detect_with_fallback
 from app.settings import FOLLOWUP_DEFAULT_INTERVAL_HOURS
@@ -139,6 +140,9 @@ async def handle_event(event_type: str, payload: Dict[str, Any]):
                 elif action == "assigned":
                     assignee = payload.get("assignee", {}).get("login")
                     if assignee:
+                        clear_followup_completed(repo_full, issue_number)
+                        clear_followup_stopped(repo_full, issue_number)
+
                         lang = await detect_with_fallback(title, body)
                         due_at = time.time() + FOLLOWUP_DEFAULT_INTERVAL_HOURS * 3600
 
@@ -154,6 +158,8 @@ async def handle_event(event_type: str, payload: Dict[str, Any]):
                     cancel_followup(repo_full, issue_number)
                     cancel_stale(repo_full, issue_number)
                     clear_followup_stopped(repo_full, issue_number)
+                    clear_followup_completed(repo_full, issue_number)
+
 
             except RepoUnavailable:
                 cancel_followup(repo_full, issue_number)

@@ -18,7 +18,9 @@ from app.cache.store import (
     is_repo_installed,
     purge_orphaned_repos,
     mark_user_seen,
-    is_followup_stopped
+    is_followup_stopped,
+    is_followup_completed,
+    mark_followup_completed
 )
 from app.github.api import (
     github_post,
@@ -101,6 +103,8 @@ async def reconcile_on_startup():
                     continue
                 if is_followup_stopped(full, number):
                     continue
+                if is_followup_completed(full, number):
+                    continue
                 assignee = assignees[0].get("login")
                 if not assignee:
                     continue
@@ -128,7 +132,6 @@ async def reconcile_on_startup():
 # =========================================================
 # Follow-up processing
 # =========================================================
-
 async def process_followup(key: str):
     data = get_followup_data(key)
     if not data or str(data.get("sent")) == "1":
@@ -142,6 +145,17 @@ async def process_followup(key: str):
 
     issue_number = int(issue_number)
 
+    # 🔒 HARD STOP GUARD (correct place)
+    if is_followup_stopped(repo, issue_number) or is_followup_completed(repo, issue_number):
+        cancel_followup(repo, issue_number)
+        cancel_stale(repo, issue_number)
+        logger.info(
+            "Skipping follow-up for %s #%s (terminal state)",
+            repo,
+            issue_number,
+        )
+        return
+
     if not is_repo_installed(repo):
         cancel_followup(repo, issue_number)
         cancel_stale(repo, issue_number)
@@ -149,6 +163,8 @@ async def process_followup(key: str):
 
     attempt = int(data.get("attempt", 1))
     if attempt > MAX_FOLLOWUP_ATTEMPTS:
+        cancel_followup(repo, issue_number)
+        mark_followup_completed(repo, issue_number)
         return
 
     assignee = data.get("assignee")
@@ -193,6 +209,7 @@ async def process_followup(key: str):
 
     stale_at = time.time() + STALE_INTERVAL_HOURS * 3600
     schedule_stale(repo, issue_number, lang, stale_at)
+
 
 
 # =========================================================
