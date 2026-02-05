@@ -1,10 +1,223 @@
-followup:
-  enabled: true
-  default_interval_hours: 48
+version: 1
 
-  # Optional per-repo override
-  repos:
-    # owner/repo: hours
-    # example:
-    # ashutoshdebug/yaplate: 24
-#new
+bot:
+  enabled: true
+
+  # Used for parsing commands + ignoring self
+  name: "yaplate"
+  mention: "@yaplate"
+
+  # Used in semantic checks + context filtering
+  aliases:
+    - "@yaplate-bot"
+    - "yaplate-bot"
+    - "yaplate"
+
+features:
+  greetings: true
+  followups: true
+  stale: true
+  translate: true
+  summarize: true
+  reply: true
+
+# ---------------------------------------------------------
+# Workers / background jobs
+# ---------------------------------------------------------
+workers:
+  # followup_scheduler.reconcile_on_startup()
+  reconcile_on_startup: true
+
+# ---------------------------------------------------------
+# Language detection (used for greetings + followups)
+# ---------------------------------------------------------
+language_detection:
+  enabled: true
+  force_english_if_body_empty: true
+  min_chunk_length: 10
+  provider_order:
+    - lingo
+    - gemini
+
+# ---------------------------------------------------------
+# Translation (Lingo.dev)
+# ---------------------------------------------------------
+translation:
+  enabled: true
+
+  glossary:
+    enabled: true
+    terms:
+      GitHub:
+        ja: "GitHub"
+        hi: "GitHub"
+      Pull Request:
+        ja: "プルリクエスト"
+        hi: "पुल रिक्वेस्ट"
+      FastAPI:
+        ja: "FastAPI"
+        hi: "FastAPI"
+
+# ---------------------------------------------------------
+# Greetings (first issue / first PR)
+# ---------------------------------------------------------
+greetings:
+  enabled: true
+  first_issue: true
+  first_pull_request: true
+  delay_seconds: 2
+  auto_translate: true
+  default_lang: "en"
+
+  messages:
+    issue: |
+      Hi @{user}, welcome to the project!
+
+      Thanks for opening your first issue here. We really appreciate you taking the time to report this.
+
+      To help us resolve it faster:
+      - Add clear reproduction steps
+      - Share logs, screenshots, or error messages
+      - Mention expected vs actual behavior
+      - Custom message issue
+
+      Feel free to ask if anything is unclear. Happy collaborating!
+
+    pull_request: |
+      Hi @{user}, welcome to the project!
+
+      Thanks for opening your first pull request — great to see your contribution!
+
+      A few tips for a smooth review:
+      - Make sure tests pass
+      - Keep commits focused and well-described
+      - Add context if the change is large
+      - Custom message PR
+
+      Looking forward to reviewing your work. Happy coding!
+
+# ---------------------------------------------------------
+# Follow-ups (Redis scheduled jobs)
+# ---------------------------------------------------------
+followups:
+  enabled: true
+
+  # Scheduling
+  default_interval_hours: 48
+  scan_interval_seconds: 600
+  max_attempts: 3
+
+  # followup_scheduler always translates template to detected lang
+  auto_translate: true
+  translate_if_lang_not_en: true
+
+  # If issue has stale label, cancel followup + stale
+  cancel_if_labeled_stale: true
+
+  triggers:
+    issues:
+      on_assigned: true
+
+    pull_requests:
+      on_opened: true
+
+      # current behavior: PR followup only valid if assignee == author
+      assignee_mode: "author_only"
+
+  messages:
+    issue: |
+      Just a gentle follow-up on this issue.
+      When you get a chance, could you please share an update on the progress?
+
+    pull_request: |
+      Just a gentle follow-up on this PR.
+      When you get a chance, could you please share an update on the progress?
+
+  stop_behavior:
+    enabled: true
+
+    # comments.py rule
+    stop_on_pure_quote: true
+
+    # comments.py behavior: quote reply cancels stale + reschedules followup
+    quote_reply_reschedules: true
+
+    # followup_scheduler guard:
+    # stopped/completed => cancel everything + skip
+    enforce_terminal_state_guard: true
+
+    mark_completed_when_max_attempts_reached: true
+    mention_maintainers_on_stop: true
+
+    semantic_escalation:
+      enabled: true
+      stop_when_waiting_for_maintainer: true
+
+      keywords:
+        - "maintainer"
+        - "approval"
+        - "approve"
+        - "review"
+        - "reviewer"
+        - "merge"
+        - "merging"
+        - "owner"
+        - "decision"
+        - "waiting for"
+
+      use_llm_fallback: true
+
+    messages:
+      maintainer_wait: |
+        The author indicated they are blocked or waiting for maintainer action.
+        Follow-up reminders have been paused.
+
+      hard_stop: |
+        The author replied only with a quoted message,
+        indicating no further automated follow-ups are needed.
+
+# ---------------------------------------------------------
+# Stale handling (Redis scheduled jobs)
+# ---------------------------------------------------------
+stale:
+  enabled: true
+
+  # scheduled after followup is sent
+  schedule_after_followup: true
+
+  # STALE_INTERVAL_HOURS
+  interval_hours: 72
+
+  # stale label name used by worker
+  label: "stale"
+  apply_label: true
+
+  message: "No response received. Marking this as stale."
+
+# ---------------------------------------------------------
+# Commands
+# ---------------------------------------------------------
+translate:
+  enabled: true
+  default_target_language: "en"
+
+summarize:
+  enabled: true
+  chunk_size: 15
+  merge_format: "executive"
+  no_emojis: true
+
+reply:
+  enabled: true
+
+# ---------------------------------------------------------
+# System messages
+# ---------------------------------------------------------
+system_messages:
+  llm_fallback: "LLM service is temporarily unavailable. Please try again later."
+
+# ---------------------------------------------------------
+# Repo lifecycle / install state
+# ---------------------------------------------------------
+repo_installation:
+  enforce_installed_repo: true
