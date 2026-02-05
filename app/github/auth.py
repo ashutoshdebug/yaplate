@@ -5,7 +5,7 @@ import httpx
 import jwt
 
 from app.logger import get_logger
-from app.settings import GITHUB_APP_ID, GITHUB_PRIVATE_KEY_PATH
+from app.settings import GITHUB_APP_ID, GITHUB_PRIVATE_KEY_PATH, GITHUB_PRIVATE_KEY
 
 
 logger = get_logger("yaplate.github.auth")
@@ -16,16 +16,30 @@ _TOKEN_EXPIRY: float = 0.0
 
 
 def _load_private_key() -> str:
+    """
+    Load GitHub App private key from:
+    1) env var GITHUB_PRIVATE_KEY (recommended for Railway)
+    2) file path GITHUB_PRIVATE_KEY_PATH (recommended for local dev)
+    """
     global _PRIVATE_KEY
 
     if _PRIVATE_KEY is not None:
         return _PRIVATE_KEY
 
+    # 1) Railway / production: env var
+    if GITHUB_PRIVATE_KEY and GITHUB_PRIVATE_KEY.strip():
+        _PRIVATE_KEY = GITHUB_PRIVATE_KEY.strip()
+        return _PRIVATE_KEY
+
+    # 2) Local dev: file path
     if not GITHUB_PRIVATE_KEY_PATH:
-        raise RuntimeError("GITHUB_PRIVATE_KEY_PATH is not set")
+        raise RuntimeError(
+            "GitHub private key not configured. "
+            "Set GITHUB_PRIVATE_KEY (recommended) or GITHUB_PRIVATE_KEY_PATH."
+        )
 
     try:
-        with open(GITHUB_PRIVATE_KEY_PATH, "r") as f:
+        with open(GITHUB_PRIVATE_KEY_PATH, "r", encoding="utf-8") as f:
             _PRIVATE_KEY = f.read()
             return _PRIVATE_KEY
     except OSError as exc:
@@ -89,9 +103,7 @@ async def get_installation_token() -> str:
         data = token_resp.json()
 
         _CACHED_TOKEN = data["token"]
-        # GitHub tokens expire in 1 hour; subtract buffer
-        _TOKEN_EXPIRY = time.time() + 50 * 60
+        _TOKEN_EXPIRY = time.time() + 50 * 60  # 1 hour minus buffer
 
         logger.info("GitHub installation token obtained")
-
         return _CACHED_TOKEN

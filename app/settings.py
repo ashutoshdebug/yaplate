@@ -3,7 +3,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# === Raw environment values ===
+# =========================================================
+# Raw environment values
+# =========================================================
 
 GITHUB_WEBHOOK_SECRET = os.getenv("GITHUB_WEBHOOK_SECRET")
 
@@ -12,23 +14,40 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 # GitHub App authentication
 GITHUB_APP_ID = os.getenv("GITHUB_APP_ID")
+
+# Prefer env key (Railway), fallback to file path (local)
+GITHUB_PRIVATE_KEY = os.getenv("GITHUB_PRIVATE_KEY")
 GITHUB_PRIVATE_KEY_PATH = os.getenv("GITHUB_PRIVATE_KEY_PATH")
 
+# =========================================================
 # Follow-up configuration
+# =========================================================
+
 FOLLOWUP_ENABLED = os.getenv("FOLLOWUP_ENABLED", "true").lower() == "true"
+
 FOLLOWUP_DEFAULT_INTERVAL_HOURS = float(
     os.getenv("FOLLOWUP_DEFAULT_INTERVAL_HOURS", "48")
 )
+
 FOLLOWUP_SCAN_INTERVAL_SECONDS = float(
     os.getenv("FOLLOWUP_SCAN_INTERVAL_SECONDS", "600")
 )
-STALE_INTERVAL_HOURS = float(os.getenv("STALE_INTERVAL_HOURS", "72"))
 
-MAX_FOLLOWUP_ATTEMPTS = int(os.getenv("MAX_FOLLOWUP_ATTEMPTS", "3"))
+STALE_INTERVAL_HOURS = float(
+    os.getenv("STALE_INTERVAL_HOURS", "72")
+)
 
+MAX_FOLLOWUP_ATTEMPTS = int(
+    os.getenv("MAX_FOLLOWUP_ATTEMPTS", "3")
+)
+
+# =========================================================
 # Configurable messages
+# =========================================================
 
-FALLBACK_MESSAGE_TEMPLATE =  "LLM service is temporarily unavailable. Please try again later."
+FALLBACK_MESSAGE_TEMPLATE = (
+    "LLM service is temporarily unavailable. Please try again later."
+)
 
 ISSUE_WELCOME_MESSAGE = """Hi @{user}, welcome to the project!
 
@@ -78,13 +97,11 @@ STOPPING_ESCALATION_HARD_STOP = (
     "indicating no further automated follow-ups are needed."
 )
 
+# =========================================================
+# Validators
+# =========================================================
 
 def validate_llm_settings() -> None:
-    """
-    Validate required LLM configuration.
-
-    Raises RuntimeError if required keys are missing.
-    """
     if not LINGO_API_KEY:
         raise RuntimeError("LINGO_API_KEY is not set")
 
@@ -93,16 +110,20 @@ def validate_llm_settings() -> None:
 
 
 def validate_github_settings() -> None:
-    """
-    Validate required GitHub App configuration.
-
-    Raises RuntimeError if required values are missing or invalid.
-    """
     if not GITHUB_APP_ID:
         raise RuntimeError("GITHUB_APP_ID is not set")
 
+    # Railway path: key is stored in env var
+    if GITHUB_PRIVATE_KEY and GITHUB_PRIVATE_KEY.strip():
+        return
+
+    # Local dev path: key is stored in file
     if not GITHUB_PRIVATE_KEY_PATH:
-        raise RuntimeError("GITHUB_PRIVATE_KEY_PATH is not set")
+        raise RuntimeError(
+            "GitHub private key not configured. "
+            "Set GITHUB_PRIVATE_KEY (recommended for hosting) "
+            "or GITHUB_PRIVATE_KEY_PATH (local dev)."
+        )
 
     if not os.path.exists(GITHUB_PRIVATE_KEY_PATH):
         raise RuntimeError(
