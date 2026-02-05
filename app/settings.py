@@ -68,6 +68,15 @@ FOLLOWUP_PR_MESSAGE = (
 
 STALE_MESSAGE = "No response received. Marking this as stale."
 
+STOPPING_ESCALATION_MAINTAINERS = (
+    "The author indicated they are blocked or waiting for "
+    "maintainer action. Follow-up reminders have been paused."
+)
+
+STOPPING_ESCALATION_HARD_STOP = (
+    "The author replied only with a quoted message, "
+    "indicating no further automated follow-ups are needed."
+)
 
 
 def validate_llm_settings() -> None:

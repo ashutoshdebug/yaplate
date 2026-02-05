@@ -28,7 +28,7 @@ from app.cache.store import (
     mark_followup_stopped,
     mark_followup_completed
 )
-from app.settings import FOLLOWUP_DEFAULT_INTERVAL_HOURS, MAX_FOLLOWUP_ATTEMPTS
+from app.settings import FOLLOWUP_DEFAULT_INTERVAL_HOURS, MAX_FOLLOWUP_ATTEMPTS, STOPPING_ESCALATION_MAINTAINERS, STOPPING_ESCALATION_HARD_STOP
 from app.nlp.context_builder import build_reply_context
 from app.nlp.semantic_check import wants_maintainer_attention
 
@@ -72,7 +72,6 @@ async def stop_followups_with_notice(
 
     body = (
         f"{mentions}\n\n"
-        "🤖 **Automation paused**\n\n"
         f"{reason}"
     ).strip()
 
@@ -125,10 +124,7 @@ async def handle_comment(payload: Dict[str, Any]):
             await stop_followups_with_notice(
                 repo,
                 issue_number,
-                reason=(
-                    "The author replied only with a quoted message, "
-                    "indicating no further automated follow-ups are needed."
-                ),
+                reason= STOPPING_ESCALATION_HARD_STOP,
                 mention_maintainers=False,
             )
             return
@@ -147,10 +143,7 @@ async def handle_comment(payload: Dict[str, Any]):
                 await stop_followups_with_notice(
                     repo,
                     issue_number,
-                    reason=(
-                        "The author indicated they are waiting for maintainer "
-                        "review or approval. Escalating and pausing automation."
-                    ),
+                    reason=STOPPING_ESCALATION_MAINTAINERS,
                     mention_maintainers=True,
                 )
                 return
@@ -181,10 +174,7 @@ async def handle_comment(payload: Dict[str, Any]):
                 await stop_followups_with_notice(
                     repo,
                     issue_number,
-                    reason=(
-                        "The author indicated they are blocked or waiting for "
-                        "maintainer action. Follow-up reminders have been paused."
-                    ),
+                    reason= STOPPING_ESCALATION_MAINTAINERS,
                     mention_maintainers=True,
                 )
                 return
