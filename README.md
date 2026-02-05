@@ -111,12 +111,12 @@ Yaplate uses standard language codes (ISO 639-1). Examples:
 1. Create a GitHub App from GitHub Developer Settings
 
 2. Enable webhook events:
-* Issues
-* Issue comments
-* Pull requests
-* Pull request review comments
-* Installation
-* Installation repositories
+  * Issues
+  * Issue comments
+  * Pull requests
+  * Pull request review comments
+  * Installation
+  * Installation repositories
 3. Set webhook URL:
 ```text
 https://YOUR_DOMAIN/webhook
@@ -126,11 +126,11 @@ https://YOUR_DOMAIN/webhook
 ## GitHub App Permissions and Events:
 
 Yaplate requires the following GitHub App permissions to work correctly:
-* Repository Permissions
-* Issues: Read & write
-* Pull requests: Read & write
-* Metadata: Read-only
-* Contents: Read-only (optional, only if future repo config is enabled)
+  * Repository Permissions
+  * Issues: Read & write
+  * Pull requests: Read & write
+  * Metadata: Read-only
+  * Contents: Read-only (optional, only if future repo config is enabled)
 ---
 
 ## Running Locally:
