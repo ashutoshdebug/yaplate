@@ -5,7 +5,7 @@ from app.logger import get_logger
 
 logger = get_logger("yaplate.nlp.context_builder")
 
-BOT_NAME = "yaplate-bot"
+BOT_NAME = "yaplate"
 
 
 def build_reply_context(payload: Dict[str, Any]) -> Dict[str, str]:
