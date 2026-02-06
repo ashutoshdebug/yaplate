@@ -1,49 +1,38 @@
 from app.logger import get_logger
-from app.nlp.gemini_client import gemini_generate
-
 
 logger = get_logger("yaplate.nlp.semantic_check")
 
+# Keep these strict. Avoid generic words like "issue", "update", "progress".
 KEYWORDS = [
     "maintainer",
-    "approval",
-    "approve",
-    "review",
+    "needs maintainer",
+    "waiting for maintainer",
+    "waiting for review",
+    "waiting for reviewer",
     "reviewer",
+    "review",
     "merge",
     "merging",
-    "owner",
-    "decision",
-    "waiting for",
+    "approval",
+    "approve",
+    "blocked",
+    "stuck",
 ]
 
 BOT_MENTIONS = ["@yaplate-bot", "yaplate-bot", "yaplate"]
 
 
 async def wants_maintainer_attention(text: str) -> bool:
+    """
+    Deterministic check only.
+
+    This is used to STOP followups, so false positives are expensive.
+    """
+    text = text or ""
     text_l = text.lower()
 
-    # 0. Ignore if user is talking to the bot
+    # Ignore if user is talking to the bot
     if any(b in text_l for b in BOT_MENTIONS):
         return False
 
-    # 1. Deterministic keyword gate
-    if any(k in text_l for k in KEYWORDS):
-        return True
-
-    # 2. Gemini semantic fallback
-    prompt = f"""
-Decide if this message means the author is waiting for maintainer or reviewer action.
-Reply only YES or NO.
-
-Message:
-{text}
-"""
-    try:
-        resp = await gemini_generate(prompt)
-        if not resp:
-            return False
-        return resp.strip().lower().startswith("yes")
-    except Exception:
-        logger.exception("Gemini semantic check failed")
-        return False
+    return any(k in text_l for k in KEYWORDS)

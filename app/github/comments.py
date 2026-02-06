@@ -154,7 +154,7 @@ async def handle_comment(payload: Dict[str, Any]):
             key = f"yaplate:followup:{repo}:{issue_number}"
             data = get_followup_data(key)
             if data:
-                attempt = int(data.get("attempt", 1))
+                attempt = int(data.get("attempt", 0))
                 if attempt < MAX_FOLLOWUP_ATTEMPTS:
                     next_due = time.time() + FOLLOWUP_DEFAULT_INTERVAL_HOURS * 3600
                     reschedule_followup(repo, issue_number, next_due)
@@ -184,7 +184,7 @@ async def handle_comment(payload: Dict[str, Any]):
             data = get_followup_data(key)
 
             if data:
-                attempt = int(data.get("attempt", 1))
+                attempt = int(data.get("attempt", 0))
                 if attempt < MAX_FOLLOWUP_ATTEMPTS:
                     next_due = time.time() + FOLLOWUP_DEFAULT_INTERVAL_HOURS * 3600
                     reschedule_followup(repo, issue_number, next_due)
