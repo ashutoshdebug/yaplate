@@ -25,7 +25,7 @@ For translation and reply commands, quote the comment you want the bot to respon
 
 **Website: [Yaplate Website](https://ashutoshdebug.github.io/yaplatebot)**
 
-**Demo: [Demo Link](https://youtu.be/sXTAufSHC4Y)**
+**Demo: [Demo Link](https://youtu.be/GTec1giJJTo)**
 
 **Test here: [Yaplate Test](https://github.com/ashutoshdebug/yaplate-test.git)**
 
