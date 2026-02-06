@@ -23,6 +23,10 @@ Mention the bot in an issue or pull request comment.
 
 For translation and reply commands, quote the comment you want the bot to respond to. Yaplate will translate or generate a reply based on the quoted text.
 
+**Website: [Yaplate Website](https://ashutoshdebug.github.io/yaplatebot)**
+
+**Demo: [Demo Link](https://youtu.be/sXTAufSHC4Y)**
+
 ---
 
 ## Commands:
