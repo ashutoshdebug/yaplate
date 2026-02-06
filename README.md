@@ -23,11 +23,11 @@ Mention the bot in an issue or pull request comment.
 
 For translation and reply commands, quote the comment you want the bot to respond to. Yaplate will translate or generate a reply based on the quoted text.
 
-**Website: [Yaplate Website](https://ashutoshdebug.github.io/yaplatebot)**
+* **Website: [Yaplate Website](https://ashutoshdebug.github.io/yaplatebot)**
 
-**Demo: [Demo Link](https://youtu.be/GTec1giJJTo)**
+* **Demo: [Demo Link](https://youtu.be/GTec1giJJTo)**
 
-**Test here: [Yaplate Test](https://github.com/ashutoshdebug/yaplate-test.git)**
+* **Test here: [Yaplate Test](https://github.com/ashutoshdebug/yaplate-test.git)**
 
 ---
 
@@ -178,6 +178,26 @@ https://<ngrok-domain>/webhook
 3. Disable bot for selected issues and pull requests
 4. Cached responses when LLM or translation services are unavailable
 5. Better permission minimization
+
+## Screenshots of Yaplate's comments:
+1. **Translate:**
+   <img width="1175" height="300" alt="image" src="https://github.com/user-attachments/assets/538adf8a-2b12-4030-aa80-0a5ea35738a2" />
+
+2. **Reply:**
+   <img width="1165" height="488" alt="image" src="https://github.com/user-attachments/assets/02397a2b-c911-4a73-bf30-320825f5aadf" />
+
+3. **Follow-ups and Stale labelling:**
+   <img width="1164" height="521" alt="image" src="https://github.com/user-attachments/assets/bbcf0662-6fa9-433b-92c9-58ff338883bd" />
+   
+4. **Greet:**
+   <img width="1178" height="495" alt="image" src="https://github.com/user-attachments/assets/4927eaf3-2c87-4cf9-bc85-c880237b73f4" />
+
+5. **Maintainers mentioned by Yaplate:**
+  <img width="1157" height="234" alt="image" src="https://github.com/user-attachments/assets/5d2e0ec9-285c-4762-9f03-190d5a75eacc" />
+
+
+
+
 
 ## Support:
 For bugs, feature requests, or feedback:
