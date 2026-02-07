@@ -22,11 +22,9 @@ Yaplate works directly inside GitHub issues and pull requests.
 Mention the bot in an issue or pull request comment.
 
 For translation and reply commands, quote the comment you want the bot to respond to. Yaplate will translate or generate a reply based on the quoted text.
-
 * **Website: [Yaplate Website](https://ashutoshdebug.github.io/yaplatebot)**
-
-* **Demo: [Demo Link](https://youtu.be/GTec1giJJTo)**
-
+* **Short Demo: [Judge's Cut](https://youtu.be/aYXd7mYPgvY)**
+* **All Features Demo: [Full Demo](https://youtu.be/GTec1giJJTo)**
 * **Test here: [Yaplate Test](https://github.com/ashutoshdebug/yaplate-test.git)**
 
 ---
@@ -51,7 +49,25 @@ Quote the message and run:
 Quote the message and run:
 ```text
 @yaplate reply in <language_code>
+<your_reply_text>
 ```
+
+## Real Example
+**User:**
+```text
+> Estoy bloqueado por un error de dependencias…
+
+@yaplate translate to en
+```
+**Yaplate:**
+```text
+> Estoy bloqueado por un error de dependencias…
+
+Translation (en):
+
+“I’m blocked by a dependency error…”
+```
+
 ---
 ## Automated Features:
 * **Greet the author/assignee**: Yaplate will greet the author or assignee when they open their first issue or pull request in the repository.
@@ -74,6 +90,7 @@ Follow-ups are posted in the assignee/author language when possible.
 * If the assignee/author replies to the follow-up with a quoted response, Yaplate treats it as progress and schedules the next follow-up (if configured).
 * If there is no meaningful progress after the configured number of follow-ups, Yaplate posts a stale comment explaining the inactivity.
 * **Special Case:** if the user indicates they are blocked or waiting for maintainer approval, Yaplate stops escalation and posts a message requesting maintainer attention. No further follow-ups or stale marking will occur.
+
 
 ## Language Codes:
 Yaplate uses standard language codes (ISO 639-1). Examples:
@@ -137,6 +154,7 @@ Yaplate requires the following GitHub App permissions to work correctly:
   * Pull requests: Read & write
   * Metadata: Read-only
   * Contents: Read-only (optional, only if future repo config is enabled)
+
 ---
 
 ## Running Locally:
@@ -193,11 +211,7 @@ https://<ngrok-domain>/webhook
    <img width="1178" height="495" alt="image" src="https://github.com/user-attachments/assets/4927eaf3-2c87-4cf9-bc85-c880237b73f4" />
 
 5. **Maintainers mentioned by Yaplate:**
-  <img width="1157" height="234" alt="image" src="https://github.com/user-attachments/assets/5d2e0ec9-285c-4762-9f03-190d5a75eacc" />
-
-
-
-
+   <img width="1157" height="234" alt="image" src="https://github.com/user-attachments/assets/5d2e0ec9-285c-4762-9f03-190d5a75eacc" />
 
 ## Support:
 For bugs, feature requests, or feedback:

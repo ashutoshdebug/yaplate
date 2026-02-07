@@ -19,7 +19,7 @@ KEYWORDS = [
     "stuck",
 ]
 
-BOT_MENTIONS = ["@yaplate-bot", "yaplate-bot", "yaplate"]
+BOT_MENTIONS = ["@yaplate-bot", "yaplate-bot", "yaplate", "@yaplate"]
 
 
 async def wants_maintainer_attention(text: str) -> bool:
