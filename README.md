@@ -23,8 +23,6 @@ Mention the bot in an issue or pull request comment.
 
 For translation and reply commands, quote the comment you want the bot to respond to. Yaplate will translate or generate a reply based on the quoted text.
 * **Website: [Yaplate Website](https://ashutoshdebug.github.io/yaplatebot)**
-* **Short Demo: [Judge's Cut](https://youtu.be/aYXd7mYPgvY)**
-* **All Features Demo: [Full Demo](https://youtu.be/GTec1giJJTo)**
 * **Test here: [Yaplate Test](https://github.com/ashutoshdebug/yaplate-test.git)**
 
 ---
