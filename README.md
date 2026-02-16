@@ -89,6 +89,19 @@ Follow-ups are posted in the assignee/author language when possible.
 * If there is no meaningful progress after the configured number of follow-ups, Yaplate posts a stale comment explaining the inactivity.
 * **Special Case:** if the user indicates they are blocked or waiting for maintainer approval, Yaplate stops escalation and posts a message requesting maintainer attention. No further follow-ups or stale marking will occur.
 
+```mermaid
+flowchart TD
+    A[Follow-up Feature] -->|Reply| B[Schedule Next Follow-Up]
+    A -->|No reply| S1[Mark Stale]
+
+    B -->|Reply| C[Schedule Next Follow-Up]
+    B -->|No reply| S2[Mark Stale]
+
+    C -->|Reply| D[...]
+    C -->|No reply| S3[Mark Stale]
+
+```
+
 
 ## Language Codes:
 Yaplate uses standard language codes (ISO 639-1). Examples:
