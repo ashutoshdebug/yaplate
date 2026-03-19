@@ -123,7 +123,7 @@ def parse_translate_command(text: str) -> Optional[Dict[str, Any]]:
             }
         return None
 
-    # 1️⃣ Thread Summary (highest priority)
+    # Thread Summary (highest priority)
     summary_text = extract_thread_summary(blockquote_lines)
     if summary_text:
         return {
@@ -133,7 +133,7 @@ def parse_translate_command(text: str) -> Optional[Dict[str, Any]]:
             "quoted_label": "Thread Summary",
         }
 
-    # 2️⃣ Proxy reply
+    # Proxy reply
     proxy_line = extract_proxy_reply(blockquote_lines)
     if proxy_line:
         return {
@@ -143,7 +143,7 @@ def parse_translate_command(text: str) -> Optional[Dict[str, Any]]:
             "quoted_label": "Proxy Reply",
         }
 
-    # 3️⃣ Translation chain
+    # Translation chain
     blocks = [
         b for b in extract_translation_blocks(blockquote_lines)
         if b["text"]
@@ -166,7 +166,7 @@ def parse_translate_command(text: str) -> Optional[Dict[str, Any]]:
             "quoted_label": b["label"],
         }
 
-    # 4️⃣ Raw quoted fallback
+    # Raw quoted fallback
     return {
         "command": "translate",
         "target_lang": target_lang,

@@ -35,7 +35,7 @@ async def translate_and_format(
 
     translated = translated or ""
 
-    # If LLM failed → no Translation(xx) header
+    # If LLM failed -> no Translation(xx) header
     if translated.strip() == FALLBACK_MESSAGE:
         quoted = "\n".join(
             f"> {line}" for line in clean_text.splitlines()
